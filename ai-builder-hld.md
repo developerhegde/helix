@@ -1,10 +1,10 @@
-# Project Ultima — AI Builder High-Level Design
+# Helix — High-Level Design
 
 Oct 8, 2026 · Vikas Hegde · Exported from the [live doc](https://claude.ai/code/artifact/079f03ac-c7a6-4776-989d-83eb47cf297b); edit there and re-export.
 
 ## Overview
 
-The builder is a self-hosted agent service that turns one Jira Cloud ticket into a GitHub pull request for a Mule 4.9 application. Agents draft every artefact; four human signatures gate the run. It is a product for several client organisations, built beside Meridian, which it imports and runs as CLIs. This phase ends at the pull request; deploy (B6) is only sketched.
+Helix is a self-hosted agent service that turns one Jira Cloud ticket into a GitHub pull request for a Mule 4.9 application. Agents draft every artefact; four human signatures gate the run. It is a product for several client organisations, built beside Meridian, which it imports and runs as CLIs. This phase ends at the pull request; deploy (B6) is only sketched.
 
 **Goals**
 
@@ -39,7 +39,7 @@ Until decision 6 is answered, the owner signs all four for the pilot, which the 
 
 ## Architecture at a glance
 
-The builder has three trust zones: hosts where humans sign, a control plane that holds the Jira, GitHub and Anypoint credentials and does every exchange, and an agent sandbox that holds no client secret.
+Helix has three trust zones: hosts where humans sign, a control plane that holds the Jira, GitHub and Anypoint credentials and does every exchange, and an agent sandbox that holds no client secret.
 
 ![Builder architecture: 3 trust zones](hld-diagrams/architecture.png)
 
@@ -57,7 +57,7 @@ Thirteen builder components in three kinds: agents that read and write text, con
 | Discover activity | Control-plane activity | Exchange search, `describe-connector`, `meridian tenant discover`; `tenant infer --repos` and `validate` offline; output handed to the intake and design agents as text | Connected app; Exchange Contributor is the only grant this phase | B3 |
 | Intake agent | Agent SDK session | Turns ticket text plus Discover output into the fact sheet (each fact known, assumed or missing) and one numbered question set | None; starts with an empty environment | B3 |
 | Design agent | Agent SDK session | Applies the client's ruleset, skills file and pattern decision table; writes the contract, HLD and LLD | One short-lived phase credential; no platform write, no publish | B4 |
-| Build agent | Agent SDK session | Scaffolds a Mule 4.9.x LTS project on JDK 17; writes the APIkit router, flows and DataWeave with the builder's own model; runs `mvn clean package` | Phase credential; reads the confirmed fact sheet file, never the ticket | B2 |
+| Build agent | Agent SDK session | Scaffolds a Mule 4.9.x LTS project on JDK 17; writes the APIkit router, flows and DataWeave with Helix's own model; runs `mvn clean package` | Phase credential; reads the confirmed fact sheet file, never the ticket | B2 |
 | Test agent | Separate Agent SDK session | Writes MUnit 3.7.4 with concrete expected values, turns coverage on with `failBuild`, never mocks the processor under test, runs the mutation check | Phase credential | B2 |
 | Git writer | Control-plane code | Opens the pull request from the bot identity with design, test evidence and provenance; posts the link on the ticket | GitHub bot | B2 |
 | Workflow engine and workers | Temporal (MIT) on owner-run workers | One workflow per ticket, one activity per phase, one signal per gate | Worker exports the phase's connected-app pair for Meridian's CLIs | B5 |
@@ -67,7 +67,7 @@ Thirteen builder components in three kinds: agents that read and write text, con
 | Audit chain | Store | Meridian `runlog.RunLog`: append-only JSONL with a SHA-256 chain, verified by `meridian runs --verify` | None | B2 imports it; B5 makes it durable |
 | Meridian | Imported names plus CLIs; a pinned wheel under decision 5's default | `naming`, `grammar.Grammar.render`, `report --fail-on CRITICAL`, `prepare`, tenant commands | Runs under the phase's connected app | B1–B5 |
 
-**Design inputs and pattern selection.** The client's standards (decision 7) reach the design agent as things it can apply: a governance ruleset, a skills file and a pattern decision table. The table is data with a test per row; it chooses from the confirmed facts (synchronous or MQ, scatter-gather, batch, reliability, saga), so each choice is explained by the row that fired. When two rows fire, the design names both and asks. Reuse found in Exchange is listed before a new layer is justified, and the default is the fewest layers that give reuse, not three-layer API-led by mandate. Most clients' standards are prose, so B4's first week per client is the client architect converting them.
+**Design inputs and pattern selection.** The client's standards (decision 7) reach the design agent as things it can apply: a governance ruleset, a skills file and a pattern decision table. The table is data with a test per row; it chooses from the confirmed facts (synchronous or MQ, scatter-gather, batch, reliability, saga), so each choice is explained by the row that fired. When two rows fire, the design names both and asks. Reuse found in Exchange is listed before a new layer is justified, and the default is the fewest layers that give reuse, not three-layer API-led by mandate. Most clients' standards are prose, so B4's first week per client is the client architect converting them. B4 creates the design artefacts in a draft pull request before gate two; the control plane records their immutable digest at approval and reopens the affected gate when any approved input changes.
 
 **B1 spike and fallbacks.** The spike takes one day: run `mulesoft-mcp-server` on a runner with no VS Code, authenticate as the connected app, call what B2 needs, and record which tools answer either way. Until then every DX MCP Server mention reads *if the spike passes*.
 
@@ -76,12 +76,12 @@ Thirteen builder components in three kinds: agents that read and write text, con
 | Scaffold | DX MCP Server | `dx:mule:project:create` from the Anypoint CLI DX plugin, `--mule-version` always passed because it defaults to 4.4.0 |
 | Connector versions | DX MCP Server `search_asset` | Anypoint CLI or Developer Hub APIs; no other headless Exchange search was found |
 | Connector operations | `describe-connector` | `describe-connector` |
-| APIkit router and flows | Builder's own model; `implement_api_spec` is read as IDE-only | Builder's own model |
+| APIkit router and flows | Helix's own model; `implement_api_spec` is read as IDE-only | Helix's own model |
 | Exchange publish (B6) | DX MCP Server publish | `exchange:asset:upload` from the Anypoint CLI |
 
 **External systems**
 
-| System | Used for | How the builder connects |
+| System | Used for | How Helix connects |
 | --- | --- | --- |
 | Jira Cloud | Intake, conversation, gates 1 and 2, run state | HMAC-signed webhook in; REST under a bot account out |
 | GitHub | Repository, pull request, gate 3, pilot runner | Bot identity behind branch protection; `claude-code-action` for the pilot |
@@ -90,6 +90,21 @@ Thirteen builder components in three kinds: agents that read and write text, con
 | Model route | Every agent session | Claude API, Bedrock or Vertex with its region, per client; the model per phase (decision 1) |
 | Vault | Per-client secrets | The CI secret store's per-client scope, read by the control plane only |
 | MuleSoft EE Nexus | EE runtime, which most applications need to run MUnit | Maven settings outside the agent's tree, read only by a permitted Maven wrapper |
+
+## Minimal control plane
+
+Helix introduces a minimal control plane before the first real ticket. It is the sole credentialed boundary in both the GitHub Action pilot and the Temporal target; agents are isolated workers, never integration points.
+
+| Concern | Control-plane decision |
+| --- | --- |
+| Identity and tenancy | A per-client service identity, vault scope, webhook secret, egress policy and repository onboarding record; generated applications remain in the client's GitHub organisation. |
+| Authoritative state | Jira remains the requester and approver experience. Helix stores execution state, idempotency keys, answer-ledger facts, artefact digests, phase outcomes, metering and audit-chain references. |
+| Event handling | Verify a per-client HMAC, timestamp replay window and delivery id before accepting an event; deduplicate deliveries; own-bot events and harmless duplicates exit 0. Closing a ticket cancels its run; reopening it re-enters Discover. |
+| Credentials and models | Only the control plane reads the vault, exchanges connected-app credentials, calls credentialed platform tools, and invokes the model gateway. Agents receive a scrubbed environment and a short-lived session token with only the phase's capability. |
+| Writes | Only control-plane adapters post Jira comments/transitions, create branches or pull requests, and invoke platform writes. Agents return bounded typed output and proposed file changes. |
+| Runtime | Before B5, a webhook service plus separate control-plane and agent Action jobs. In B5, the same service signals Temporal and dispatches one ephemeral, single-client worker per workflow. |
+
+The control-plane component specification, profile schema, event contract, state schema, and idempotency tests are B2 entry criteria. No real ticket enters B2 until they are present.
 
 ## Ticket lifecycle
 
@@ -126,7 +141,7 @@ The fact sheet is the hinge: the intake agent writes it from untrusted text, a h
 
 ## Trust boundaries and security
 
-**Data-flow posture.** Meridian's `docs/DATA-FLOW.md` says nothing leaves the machine; the builder reverses that: client data leaves the machine by design, under the client's rules. The profile says which route is used and what may be sent, and the doctor refuses a route the rules forbid. This phase promises no zero-data-retention or EU residency beyond what the route itself makes.
+**Data-flow posture.** Meridian's `docs/DATA-FLOW.md` says nothing leaves the machine; Helix reverses that: client data leaves the machine by design, under the client's rules. The profile says which route is used and what may be sent, and the doctor refuses a route the rules forbid. This phase promises no zero-data-retention or EU residency beyond what the route itself makes.
 
 The control plane holds the Jira and Anypoint credentials, its git writer holds the GitHub bot credential, and it does every credential exchange. An agent gets at most one short-lived credential for one phase, the intake agent gets none, and nothing built in B1–B5 can deploy. The rule exists because ticket text hijacked coding agents in GitHub Actions into exfiltrating credentials in April 2026.
 
@@ -142,29 +157,29 @@ The control plane holds the Jira and Anypoint credentials, its git writer holds 
 
 **Untrusted text path.** The control plane fetches the ticket and hands the intake agent text; the agent returns text; the control plane posts it. The build agent sees only the human-confirmed fact sheet. An instruction planted in a comment is quoted back on the ticket and acted on by nobody.
 
-**Inbound events.** A webhook with a wrong HMAC signature is dropped and logged. Events whose actor is the builder's own bot are ignored, so the pipeline never answers itself. A signal for a gate not yet reached, or from the wrong actor, is refused.
+**Inbound events.** A webhook with a wrong HMAC signature is dropped and logged. Events whose actor is Helix's own bot are ignored, so the pipeline never answers itself. A signal for a gate not yet reached, or from the wrong actor, is refused.
 
 **Agent sandbox.** Agent SDK hooks deny secret-path reads and any deploy call, and route every approval to a Jira comment rather than a keyboard. Each worker has an outbound host allowlist; a run under an EU-pinned profile is asserted to call no other host. An injection corpus runs through every phase's tool log and must produce no credential read and no call outside the allowlist. EU residency exists only through Bedrock or Vertex, and Fable 5.1 is unavailable under zero-data-retention.
 
-**Generated code.** Every environment-specific or secret value is a `${MERIDIAN_SET_<ENV>}` or `${MERIDIAN_ENCRYPT_<ENV>}` mark that Mule refuses to start on. `meridian report --fail-on CRITICAL` runs over the generated repository, and a secret scanner runs before any commit. No client detail or requirement text enters the builder's own repository; a per-client deny-list and tripwire check every commit.
+**Generated code.** Every environment-specific or secret value is a `${MERIDIAN_SET_<ENV>}` or `${MERIDIAN_ENCRYPT_<ENV>}` mark that Mule refuses to start on. `meridian report --fail-on CRITICAL` runs over the generated repository, and a secret scanner runs before any commit. No client detail or requirement text enters Helix's own repository; a per-client deny-list and tripwire check every commit.
 
 **Merge integrity.** The pull request sits behind branch protection, and the bot's own review never satisfies a gate. The research did not find GitHub stating whether a bot's review satisfies a required review, so each repository carries its own proof: a bot-only approval shown blocked. *Approve and run workflows* is locked on and its state recorded; the Jira and GitHub bots are listed in `allowed_bots`, held by a test.
 
-**Provenance.** Every artefact carries ticket, model and provider, prompt hash, region and signing reviewer, in the pull request and in the audit chain.
+**Provenance.** Every artefact carries ticket, model and provider, prompt hash, region and signing reviewer, in the pull request and in the audit chain. Each requirement and design gate records the SHA-256 digest of the approved fact sheet and artefact set, respectively. Gate owners are explicitly listed per gate in the client profile; a fact-sheet or design change invalidates the earliest dependent approval. The draft design pull request is the gate-two review surface, and required checks must pass on its current head commit before merge.
 
 ## Runtime and non-functional design
 
-The pilot runs as a GitHub Action with the ticket as its only state; B5 moves the same CLIs under Temporal so a run can wait days between gates. Because every phase is a CLI, the move changes the runner, not the phases. B2–B4 take their briefs as files, unchanged in shape under B5, or B2's measurement stops meaning anything.
+The pilot runs as separate control-plane and agent GitHub Action jobs; Jira is the human workflow surface while the control plane owns execution state. B5 moves the same CLIs under Temporal so a run can wait days between gates. Because every phase is a CLI, the move changes the runner, not the phases. B2–B4 take their briefs as files, unchanged in shape under B5, or B2's measurement stops meaning anything.
 
 |  | Pilot (GitHub Action, B2–B4) | Target (B5) |
 | --- | --- | --- |
-| Runner | `claude-code-action` | One Temporal workflow per ticket on owner-run workers |
-| State | The Jira ticket | The Jira ticket, with a durable workflow waiting on gate signals |
+| Runner | Separate control-plane and `claude-code-action` agent jobs | One Temporal workflow per ticket on owner-run workers |
+| State | Jira for human-visible state; Helix control-plane store for execution state | Jira for human-visible state; Helix store plus a durable workflow waiting on gate signals |
 | Waiting | No durable wait; six-hour ceiling | Survives worker restarts; resumes on the gate's signal without repeating a write |
 | Trigger | Ticket transition; bots listed in `allowed_bots` | Jira webhook raises one signal per gate |
 | Unit of work | A CLI call per phase | An activity per phase, the same CLI call |
 
-**Worker.** A container with JDK 17, Maven, Node, the CLIs and, if the spike passes, the DX MCP Server. Each workflow loads its client's profile in a fresh process, because import-time settings have cost Meridian three bugs. Per workflow the worker exports the client's `MERIDIAN_*` paths, `MERIDIAN_ENV_ALLOWLIST` set to non-production, `MERIDIAN_AUTH_MODE=connected_app` explicitly, and the phase's `ANYPOINT_CLIENT_ID` and `ANYPOINT_CLIENT_SECRET`. A test holds that no path in the worker reaches browser SSO.
+**Worker.** A container with JDK 17, Maven, Node, the CLIs and, if the spike passes, the DX MCP Server. Each workflow loads its client's profile in a fresh process, because import-time settings have cost Meridian three bugs. The control-plane job alone exports the client's `MERIDIAN_*` paths, `MERIDIAN_ENV_ALLOWLIST` set to non-production, `MERIDIAN_AUTH_MODE=connected_app` explicitly, and connected-app credentials. It invokes credentialed CLIs and a repository proxy that supplies Nexus authentication; the agent job receives a scrubbed environment, the bounded fact sheet, egress policy, and a per-session model-gateway token only. A pre-build check permits only the pinned Maven parent, repositories and plugins. Tests prove that no credential-shaped variable reaches an agent and no worker path reaches browser SSO.
 
 | Concern | Design response |
 | --- | --- |
@@ -203,7 +218,7 @@ If AsyncAPI is ever used, it is 2.6 on Mule 4.6 and later; there is no 3.x.
 
 ## Delivery roadmap
 
-The plan sizes this phase at 11–15 weeks of engineering for one senior engineer with a part-time MuleSoft architect, run in dependency order B1 to B5, which is not the ticket's order: build, test and merge (B2) are proven before intake (B3) and design (B4). The sizes are the research's estimates with no evidence behind them; the first real ticket corrects them.
+The plan sizes this phase at 11–15 weeks of engineering for one senior engineer with a part-time MuleSoft architect. The delivery sequence is B1 foundation, a hardened B2 synthetic vertical slice, B3 intake and B4 design automation, then B5 durable orchestration. A real client ticket is not the proof-of-concept; it starts only after the synthetic slice has passed B2 entry criteria. The sizes are estimates with no evidence behind them; the first real ticket corrects them.
 
 ![Delivery roadmap: B1–B6, 5 gates](hld-diagrams/delivery-roadmap.png)
 
@@ -214,19 +229,19 @@ B1 can start now but mostly waits on admins; each item is dated asked and answer
 - A Jira bot account and a GitHub bot identity
 - The account team's written answers on Einstein-backed generation's cost and on `license.lic`
 
-A trial org is not a test bed: it has no generative feature, and no MUnit for most applications unless Support issues EE Nexus credentials. B2 builds from a hand-confirmed fact sheet first, so the expensive part is proven on one real ticket before intake and design are automated. QUICKSTART, ONBOARDING (whose numbered items the doctor cites) and RUNBOOK are written alongside each phase.
+A trial org is not a test bed: it has no generative feature, and no MUnit for most applications unless Support issues EE Nexus credentials. B2 first proves the complete hardened path using an `acme-*` fact sheet and fixture repository: model gateway, scrubbed agent sandbox, Maven proxy, generated Mule project, MUnit, mutation check, required PR verification, provenance, and a draft pull request. Only then does one hand-confirmed real fact sheet enter B2. QUICKSTART, ONBOARDING (whose numbered items the doctor cites) and RUNBOOK are written alongside each phase.
 
 ## Open decisions
 
-Decisions 1–4 are answered: model route per client, with hosted agents ruled out for this phase; the builder's own model writes every flow; a multi-client product; Jira Cloud plus GitHub. Eight remain open with defaults. The plan says 7 blocks B4 and 11 and 12 are needed before B2's first real run; the other *Needed by* entries are this HLD's inference.
+Decisions 1–4 are answered: model route per client, with hosted agents ruled out for this phase; Helix's own model writes every flow; a multi-client product; Jira Cloud plus GitHub. Eight remain open with defaults. The plan says 7 blocks B4 and 11 and 12 are needed before B2's first real run; the other *Needed by* entries are this HLD's inference.
 
 | # | Decision | Default if not decided | Needed by |
 | --- | --- | --- | --- |
-| 5 | Repository shape | New repository importing Meridian as a version-pinned wheel; a test holds the imported names and the CLIs' exit codes and output shapes. Meridian's tree carries the nothing-leaves-the-machine posture, and the builder's Node, JDK, Maven and SDK dependencies do not belong in its lock | Not stated; B1 starts on the default |
+| 5 | Repository shape | New repository importing Meridian as a version-pinned wheel; a test holds the imported names and the CLIs' exit codes and output shapes. Meridian's tree carries the nothing-leaves-the-machine posture, and Helix's Node, JDK, Maven and SDK dependencies do not belong in its lock | Not stated; B1 starts on the default |
 | 6 | Gate signers and turnaround | Owner signs all four for the pilot; recommended: one architect for gates 1–2, a non-author developer for 3, the release owner for 4; two business days, a reminder at one; per client in the profile | B3's first ticket (inferred: the default is wrong from the second) |
 | 7 | Mandatory design artefacts | OAS 3.0 contract-first, ruleset at zero violations, fewest layers that give reuse, core Logger with MDC; per client in the profile | B4 |
 | 8 | Deploy route | Hand the artefact to the client's own pipeline and confirm RUNNING with Meridian's assertions; a registered CloudHub 2.0 write under the capture gate only for a client with no pipeline | B6 (inferred) |
-| 9 | Product name | *The builder*; nothing costly to rename embeds it | Never blocking |
+| 9 | Product name | **Helix**; use it in all product-facing documentation, code, packages, and operational identifiers | Decided |
 | 10 | Outbound messages | Post only to the requester, on the ticket; nothing external, and nothing by email, without a human sending it; a *Draft* status in B3 for clients who want every comment read first | B3's first ticket (inferred) |
 | 11 | Dollar cap | Three times the medium estimate as the meter measures it, about $170 per run (3 × $33 × 1.3 rework × 1.3 tokenizer), and half that per phase; adjusted from the meter, never removed | B2's first real run |
 | 12 | Pilot acceptance target | Merged on the first real ticket with both numbers recorded; by the third, no mapping rewritten by hand and under 90 reviewer minutes, a chosen target the first three tickets replace | B2's first real run |
@@ -237,14 +252,14 @@ An independent architect review found 31 gaps in the plan; each was checked agai
 
 | # | Area | Gap in the plan | Proposed resolution | Before |
 | --- | --- | --- | --- | --- |
-| 1 | Credentials | The worker exports the connected-app secret for Meridian's CLIs, yet B5 requires an agent to start with one short-lived credential only; the short-lived phase credential has no stated scope, lifetime or refresh | Split each activity into a control-plane process that alone holds the secret and runs credentialed CLIs and Exchange lookups, and a sandbox started with a scrubbed environment; publish a per-phase credential matrix; add bearer-credential auth to the spike's pass criteria | B2's first real ticket |
-| 2 | Model access | Every agent needs model-route credentials, which the credential model omits, so the empty-environment tests cannot hold | A control-plane model gateway holds route credentials, pins the region, meters tokens and enforces caps; agents get a per-session token that grants nothing else | B2's first real ticket |
-| 3 | Untrusted text | Requester text still reaches credentialed agents through the fact sheet's free text, Discover output and rejection reasons | Treat every credentialed agent as injectable: read-only least-privilege credentials, egress allowlists, all writes through the control plane, a typed fact sheet with bounded free text quoted as data; state the residual risk | B2, typed sheet in B3 |
-| 4 | Pilot exposure | B2 runs real tickets in an Action before B5's hooks, Maven wrapper, allowlist and injection corpus exist; its environment test checks only for a Jira credential | Before the first real ticket: separate agent and control-plane jobs, a scrubbed agent environment, the hook deny-list, an egress allowlist, an environment test over every credential name; synthetic `acme-*` tickets until then | B2's first real ticket |
-| 5 | Maven | The Maven wrapper runs agent-written poms and tests with the Nexus credential in reach; B2 names no mechanism at all | A control-plane repository proxy adds Nexus auth on the way out; generated poms inherit a pinned parent; a pre-build check rejects unlisted plugins and repositories | B2's first real ticket |
-| 6 | Control plane and vault | The control plane is never designed as a component (where it runs before B5, tenancy, availability); "vault" has two definitions | A component spec: process boundary, per-client identity, an Action job plus webhook service before B5 and a separate worker pool under Temporal; one vault definition with a concrete per-client store | B2 |
-| 7 | Gate integrity | Gate signals are not tied to the approved artefact's version; any human satisfies "non-author"; the design has no review surface at gate 2, because the PR opens after build | Record a digest of what was approved with each gate; a changed fact reopens the earliest affected gate; approver lists per gate in the profile; the git writer opens a draft PR at B4 for design review | B4 |
-| 8 | Re-verification | Branch protection requires review only, so reviewer edits merge without re-running tests, `report` or the scanner | A required status check on the PR head commit, started by a review-ready label to save CI minutes; evidence records the commit it was produced on | B2 |
+| 1 | Credentials | The worker exports the connected-app secret for Meridian's CLIs, yet B5 requires an agent to start with one short-lived credential only; the short-lived phase credential has no stated scope, lifetime or refresh | **Adopted:** a control-plane process alone holds the secret and runs credentialed CLIs and Exchange lookups; agents start with a scrubbed environment; publish a per-phase credential matrix; add bearer-credential auth to the spike's pass criteria | B2 entry criterion |
+| 2 | Model access | Every agent needs model-route credentials, which the credential model omits, so the empty-environment tests cannot hold | **Adopted:** a control-plane model gateway holds route credentials, pins the region, meters tokens and enforces caps; agents get a per-session token that grants nothing else | B2 entry criterion |
+| 3 | Untrusted text | Requester text still reaches credentialed agents through the fact sheet's free text, Discover output and rejection reasons | **Adopted:** treat every credentialed agent as injectable: read-only least-privilege credentials, egress allowlists, all writes through the control plane, a typed fact sheet with bounded free text quoted as data; state the residual risk | B2 entry criterion; typed sheet in B3 |
+| 4 | Pilot exposure | B2 runs real tickets in an Action before B5's hooks, Maven wrapper, allowlist and injection corpus exist; its environment test checks only for a Jira credential | **Adopted:** before the first real ticket, separate agent and control-plane jobs, a scrubbed agent environment, the hook deny-list, an egress allowlist, an environment test over every credential name; synthetic `acme-*` tickets until then | B2 entry criterion |
+| 5 | Maven | The Maven wrapper runs agent-written poms and tests with the Nexus credential in reach; B2 names no mechanism at all | **Adopted:** a control-plane repository proxy adds Nexus auth on the way out; generated poms inherit a pinned parent; a pre-build check rejects unlisted plugins and repositories | B2 entry criterion |
+| 6 | Control plane and vault | The control plane is never designed as a component (where it runs before B5, tenancy, availability); "vault" has two definitions | **Adopted:** a component specification defines the process boundary, per-client identity, an Action job plus webhook service before B5 and a separate worker pool under Temporal; one vault definition with a concrete per-client store | B2 entry criterion |
+| 7 | Gate integrity | Gate signals are not tied to the approved artefact's version; any human satisfies "non-author"; the design has no review surface at gate 2, because the PR opens after build | **Adopted:** record a digest of what was approved with each gate; a changed fact reopens the earliest affected gate; approver lists per gate in the profile; the git writer opens a draft PR at B4 for design review | B4 |
+| 8 | Re-verification | Branch protection requires review only, so reviewer edits merge without re-running tests, `report` or the scanner | **Adopted:** a required status check on the PR head commit, started by a review-ready label to save CI minutes; evidence records the commit it was produced on | B2 |
 | 9 | Placeholders | Marks Mule refuses to start on conflict with running MUnit and with `report`'s MARKER\_LEFT; no step between merge and deploy fills SET marks; only ENCRYPT marks have an owner, the key holder | Per-environment mark files plus a test file of fixture values; MARKER\_LEFT scoped to non-test environments; a key-holder step after merge | B2 |
 | 10 | Exchange and connected apps | Exchange Contributor can write, and "no publish" is shown by a tool log, not a permission; the plan says both one app per agent and one per client | Test whether a read-only Exchange role suffices; make B4's guard a refused-publish test; fix one model, recommended one app per client per Anypoint-using phase | B1 |
 | 11 | Repositories | Where generated applications live, and whose runner executes the Action, is unstated | Builder code in its own repository with `acme-*` fixtures only; generated apps in the client's GitHub organisation, onboarded per repository and checked by the doctor | B1 |
@@ -306,4 +321,4 @@ Two questions stay open. **Captures:** Meridian blocks a registered write until 
 4. A design is a contract at zero violations plus an HLD and LLD whose key list the generated code later agrees with. *(B4)*
 5. A workflow survives a worker restart and resumes on the gate's transition; every artefact is in the chain; a run stops at its cap and says so; the injection corpus produces no credential read and no call outside the allowlist; nothing holds a credential that can deploy. *(B5)*
 6. Every guard has a test in both directions, the suite is green, the tripwire is clean on every commit, each week-zero item is dated asked and answered, and the spike's result is written down either way.
-7. Somebody who has never seen the builder raises a ticket and reaches a merged pull request without asking the engineer a question; carried until it happens, and marked honestly either way.
+7. Somebody who has never seen Helix raises a ticket and reaches a merged pull request without asking the engineer a question; carried until it happens, and marked honestly either way.
