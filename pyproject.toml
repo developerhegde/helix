@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "helix"
+dynamic = ["version"]
+requires-python = "==3.12.*"
+# B1 needs only PyYAML; the LLD 01 §3.2 dependencies land with the sub-phases that use them.
+dependencies = ["PyYAML"]
+
+[project.scripts]
+helix = "helix.cli.main:main"
+
+[tool.hatch.version]
+path = "src/helix/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/helix"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

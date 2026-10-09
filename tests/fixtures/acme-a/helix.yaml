@@ -1,0 +1,59 @@
+# Synthetic fixture: every identifier is an acme-* placeholder.
+schema_version: 1
+client_id: acme-a
+model_route:
+  provider: anthropic
+  region: eu-west-1
+  phases:
+    intake: claude-haiku-4-5-20251001
+    design: claude-opus-5-5
+    build: claude-opus-5-5
+    test: claude-opus-5-5
+  run_cap_usd: 170
+  phase_cap_usd: 85
+data_handling:
+  permitted_regions:
+    - eu-west-1
+  zero_data_retention_required: true
+  allowed_hosts:
+    - api.anthropic.com
+jira:
+  cloud_id: acme-cloud-id
+  project_key: ACME
+  webhook_secret_ref: vault://acme-a/jira-webhook
+  bot_account_id: acme-jira-bot
+  statuses:
+    needs_info: Needs info
+    requirement_review: Requirement review
+    design_review: Design review
+github:
+  organisation: acme-org
+  bot_account: acme-github-bot
+  allowed_bots:
+    - acme-jira-bot
+    - acme-github-bot
+  repositories:
+    - acme-integration-services
+vault:
+  provider: ci-secret-store
+  scope: acme-a/profile
+anypoint:
+  business_group_id: acme-nonprod
+  connected_app_ref: vault://acme-a/anypoint-connected-app
+  secret_expiry: 2030-01-01T00:00:00Z
+  environments:
+    - acme-sandbox
+    - acme-test
+design:
+  contract_format: oas3
+  governance_ruleset: anypoint-best-practices-1.6.5
+  logging: core-logger-mdc
+gates:
+  requirement:
+    - acme-architect@example.invalid
+  design:
+    - acme-architect@example.invalid
+  merge:
+    - acme-developer@example.invalid
+  deploy:
+    - acme-release-owner@example.invalid

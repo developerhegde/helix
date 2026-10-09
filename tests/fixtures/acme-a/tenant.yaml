@@ -1,0 +1,17 @@
+# Synthetic fixture in the shape of Meridian 1.8.1 `meridian init` output.
+schema_version: 1
+name: "Acme A Synthetic Tenant"
+captured_on: "2026-10-01"
+environments:
+  - key: SBX
+    display: Sandbox
+    rank: 1
+    is_production: false
+    in_scope: true
+  - key: TST
+    display: Test
+    rank: 2
+    is_production: false
+    in_scope: true
+mq_region: eu-west-1
+config_dir_in_repo: src/main/resources/config
