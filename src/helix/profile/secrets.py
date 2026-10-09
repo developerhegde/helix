@@ -7,7 +7,7 @@ and it returns field paths only: a detected value is never returned or printed.
 from __future__ import annotations
 
 import re
-from typing import Any, Iterable, List, Mapping
+from typing import Any, List, Mapping
 
 REFERENCE_PREFIX = "vault://"
 
@@ -59,13 +59,4 @@ def scan(data: Any, prefix: str = "") -> List[str]:
                 hits.append(path)
 
     walk(data, prefix, "")
-    return hits
-
-
-def scan_dotenv(values: Mapping[str, str], credential_keys: Iterable[str]) -> List[str]:
-    """Like ``scan`` for parsed ``.env`` pairs, plus Meridian's refused credential keys."""
-    hits = scan(dict(values))
-    for key in credential_keys:
-        if values.get(key, "").strip() and key not in hits:
-            hits.append(key)
     return hits

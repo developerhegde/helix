@@ -5,7 +5,7 @@ import unittest
 from datetime import timedelta
 
 from helix import product_identity as pid
-from helix.profile.doctor import REQUIRED_FILES, run_doctor
+from helix.profile.doctor import run_doctor
 from helix.profile.loader import ProfileInvalid, load_profile
 from helix.profile.policy import DEFAULT_POLICY, ProviderPolicy
 from tests.support import NOW, make_profile, run_cli
@@ -38,13 +38,12 @@ class DoctorTest(unittest.TestCase):
         self.assertEqual(load_profile(root, now=NOW).client_id, "acme-a")
 
     # 2
-    def test_each_missing_file(self):
-        for name in REQUIRED_FILES:
-            with self.subTest(name):
-                root = self.profile()
-                os.remove(os.path.join(root, name))
-                self.assertEqual(self.paths(root, "B1-001"), [name])
-                self.assertEqual(run_cli("doctor", "--profile", root)[0], 1)
+    def test_missing_profile_file(self):
+        root = self.profile()
+        os.remove(os.path.join(root, pid.PROFILE_FILENAME))
+        self.assertEqual([(f.id, f.path) for f in run_doctor(root, now=NOW).findings],
+                         [("B1-001", pid.PROFILE_FILENAME)])
+        self.assertEqual(run_cli("doctor", "--profile", root)[0], 1)
 
     # 3
     def test_each_section_omitted(self):
@@ -95,9 +94,8 @@ class DoctorTest(unittest.TestCase):
 
     # 7
     def test_plaintext_secret_is_never_echoed(self):
-        root = self.profile(lambda d: d["jira"].update(api_token=FAKE_SECRET),
-                            env_extra=f"ANYPOINT_CLIENT_SECRET={FAKE_SECRET}\n")
-        self.assertEqual(self.paths(root, "B1-014"), ["jira.api_token", ".env:ANYPOINT_CLIENT_SECRET"])
+        root = self.profile(lambda d: d["jira"].update(api_token="acme-plain-value", cloud_id=FAKE_SECRET))
+        self.assertEqual(self.paths(root, "B1-014"), ["jira.cloud_id", "jira.api_token"])
         for fmt in ("text", "json"):
             code, out, err = run_cli("doctor", "--profile", root, "--format", fmt)
             self.assertEqual(code, 1)
@@ -161,14 +159,10 @@ class DoctorTest(unittest.TestCase):
             d["anypoint"]["secret_expiry"] = "2020-01-01T00:00:00Z"
             d["gates"]["merge"] = []
 
-        root = self.profile(breakage)
-        os.remove(os.path.join(root, "compare.yaml"))
-        with open(os.path.join(root, "tenant.yaml"), "a") as handle:
-            handle.write("acme_unknown_key: 1\n")
-        ids = self.ids(root)
+        ids = self.ids(self.profile(breakage))
         self.assertEqual(ids, sorted(ids))
-        self.assertEqual(set(ids), {"B1-001", "B1-003", "B1-004", "B1-006", "B1-007", "B1-008", "B1-009",
-                                    "B1-011", "B1-012", "B1-013", "B1-014", "B1-015"})
+        self.assertEqual(set(ids), {"B1-003", "B1-004", "B1-006", "B1-007", "B1-008", "B1-009",
+                                    "B1-011", "B1-012", "B1-013", "B1-014"})
 
 
 if __name__ == "__main__":

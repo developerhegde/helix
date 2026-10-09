@@ -6,31 +6,31 @@ Implements [`b1-client-profile-and-doctor.md`](b1-client-profile-and-doctor.md).
 
 | Item | Choice |
 | --- | --- |
-| Language | Python, targeting 3.12 (`pyproject.toml`); the code also runs on 3.9 |
+| Language | Python 3.14 (`pyproject.toml`), on the macOS and Windows dev machines |
 | CLI framework | `argparse` (standard library), entry point `helix.cli.main:main` |
 | Profile parsing | PyYAML `safe_load`, the only runtime dependency in B1 |
 | Persistence | None: the doctor is read-only and stateless |
-| Tests | Standard-library `unittest`, also collectable by pytest |
+| Tests | Standard-library `unittest`, also collectable by pytest; run with `python -m unittest discover -s tests -t .` |
 
 ## Modules
 
 | Path | Responsibility |
 | --- | --- |
 | `src/helix/product_identity.py` | Product identity manifest; profile file name and environment variable derive from it |
-| `src/helix/profile/doctor.py` | Rules B1-001 to B1-015, `Finding`, `Report`, exit code |
+| `src/helix/profile/doctor.py` | Rules B1-001 to B1-014, `Finding`, `Report`, exit code |
 | `src/helix/profile/loader.py` | `load_profile()`: refuses a profile with any error before a phase starts |
 | `src/helix/profile/policy.py` | The local, versioned policy table |
 | `src/helix/profile/secrets.py` | Secret tripwire: key name and value shape, paths only |
 | `src/helix/profile/render.py` | Text and JSON output |
-| `src/helix/meridian_bridge/profile_files.py` | Structural adapter for the Meridian-owned files, pinned to Meridian 1.8.1 |
 | `src/helix/cli/` | `helix doctor` |
 
 ## Decisions and resolved ambiguities
 
+0. **Helix is standalone** (owner decision, 2026-10-09). It imports, reads, and validates nothing of Meridian's. The profile is `helix.yaml` only, B1-015 is withdrawn, and a guard test refuses any `meridian` reference in `src/` or `pyproject.toml`.
 1. **Exit codes with warnings.** The contract's exit table lists "warnings only without `--strict`" under exit 1, but exit 0 and the `--strict` description say warnings fail only under `--strict`. Implemented: errors → 1; warnings only → 0, or 1 with `--strict`.
 2. **Profile path.** `--profile` wins; `HELIX_CLIENT_PROFILE` is the only fallback. Both must be absolute. Nothing else is searched.
 3. **Status values.** `healthy`, `warning`, `error`. JSON adds `deferred_checks` (additive), so automation can see that connected-system checks were not simulated.
-4. **Dependent rules are skipped, independent ones all run.** A missing `helix.yaml` reports only B1-001 for it; an unsupported `schema_version` stops B1-003 to B1-013 but not the secret scan or B1-015. A missing `data_handling` section reports B1-005 and skips B1-006.
+4. **Dependent rules are skipped, independent ones all run.** A missing `helix.yaml` reports only B1-001 for it; an unsupported `schema_version` stops B1-003 to B1-013 but not the secret scan. A missing `data_handling` section reports B1-005 and skips B1-006.
 5. **Allowed hosts (B1-006).** "Approved by the client's policy" is read as: every listed host must be in the policy table's hosts for the configured provider, with `{region}` filled from the model route. Entries may be a bare host or `https://host`; other schemes, ports and paths are refused.
 6. **Production-like names (B1-011).** Case-insensitive match of the whole name or any alphanumeric token (`acme-PRD` is refused; `acme-product` is not) against `prod`, `production` and the table's aliases (`prd`, `live`).
 7. **Findings never carry profile values.** Messages are fixed text; only the field path varies. YAML parser messages are dropped because they quote content. An internal error prints only the exception type.
@@ -41,9 +41,9 @@ Implements [`b1-client-profile-and-doctor.md`](b1-client-profile-and-doctor.md).
 
 | Item | Deviation | Reason | Closes in |
 | --- | --- | --- | --- |
-| B1-015 | The Meridian files are checked by a structural adapter that mirrors Meridian 1.8.1's key sets; it does not import `meridian` or run its parser | Importing Meridian applies a `.env` to the process environment, which the offline doctor must never do, and the Meridian wheel is not yet vendored (LLD 01 §3.2) | B2: vendored wheel and contract-test suite behind `meridian_bridge` |
-| Packaging | No `uv.lock` or vendored Meridian wheel; only PyYAML is declared | B1 needs nothing else; no Python 3.12 or `uv` was available on the build machine | When B2 adds its dependencies |
-| Test runtime | The suite ran on Python 3.9.6 (Meridian's existing virtual environment, which carries PyYAML) | No Python 3.12 installed locally | First CI run on 3.12 |
+| Packaging | No `uv.lock`; only PyYAML is declared | B1 needs nothing else; `uv` is not installed on the dev machines | When B2 adds its dependencies |
+| LLD | `docs/lld/` still describes Meridian integration (`meridian_bridge`, pinned wheel, Meridian CLIs and audit chain) | The standalone decision came after the LLD | LLD revision, before B2 design work |
+| Test runtime | The suite ran on Python 3.14.8 on macOS only, in the project's `.venv` | The Windows dev machine has not run it yet | First run on Windows or in CI |
 
 ## Policy table
 

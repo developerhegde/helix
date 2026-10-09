@@ -1,4 +1,4 @@
-"""Guards: the doctor is offline and read-only (test 11); identifiers stay rename-safe."""
+"""Guards: the doctor is offline and read-only (test 11); Helix is standalone and rename-safe."""
 
 import ast
 import os
@@ -43,14 +43,9 @@ class OfflineGuard(unittest.TestCase):
 
 class ProductNameGuard(unittest.TestCase):
     def test_no_product_literal_outside_identity_manifest(self):
-        package = os.path.dirname(os.path.dirname(os.path.abspath(pid.__file__)))
-        package = os.path.join(package, pid.CANONICAL_ID)
         offenders = []
-        for folder, _, files in os.walk(package):
-            for name in files:
-                path = os.path.join(folder, name)
-                if not name.endswith(".py") or path == os.path.abspath(pid.__file__):
-                    continue
+        for path in _sources():
+            if path != os.path.abspath(pid.__file__):
                 with open(path) as handle:
                     tree = ast.parse(handle.read())
                 docstrings = {id(n.body[0].value) for n in ast.walk(tree)
@@ -61,6 +56,23 @@ class ProductNameGuard(unittest.TestCase):
                             and id(node) not in docstrings and pid.CANONICAL_ID in node.value.lower()):
                         offenders.append(f"{path}:{node.lineno}")
         self.assertEqual(offenders, [])
+
+
+class StandaloneGuard(unittest.TestCase):
+    def test_no_meridian_reference_in_source_or_packaging(self):
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(pid.__file__))))
+        offenders = []
+        for path in _sources() + [os.path.join(root, "pyproject.toml")]:
+            with open(path) as handle:
+                if "meridian" in handle.read().lower():
+                    offenders.append(path)
+        self.assertEqual(offenders, [])
+
+
+def _sources():
+    package = os.path.dirname(os.path.abspath(pid.__file__))
+    return sorted(os.path.join(folder, name) for folder, _, files in os.walk(package)
+                  for name in files if name.endswith(".py"))
 
 
 if __name__ == "__main__":

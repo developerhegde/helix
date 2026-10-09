@@ -20,7 +20,7 @@ Every design decision in the LLD carries one tag, so a reader can tell what is s
 
 | Item | Choice | Tag |
 | --- | --- | --- |
-| Helix language | Python 3.12 (Meridian is Python; imported as a wheel) | `[LLD]` |
+| Helix language | Python 3.14 (Meridian is Python; imported as a wheel) | `[LLD]` |
 | Meridian | Version-pinned wheel; only `meridian_bridge` imports it | `[PLAN-DEFAULT 5]` |
 | Orchestration | Temporal (MIT), Python SDK | `[PLAN]` |
 | Agent runtime | Claude Agent SDK for Python (`claude-agent-sdk`) | `[PLAN]` |

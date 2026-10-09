@@ -23,23 +23,20 @@ B1 excludes:
 - Contacting Jira, GitHub, Anypoint, Nexus, or a model provider.
 - Building the webhook service, model gateway, agent sandbox, Maven proxy, or workflow engine.
 - Storing client profiles or secrets in this repository.
+- Reading, validating, importing, or depending on Meridian or any Meridian file. Helix is a standalone tool (owner decision, 2026-10-09).
 
 ## Profile boundary
 
-A client profile is a directory outside the Helix repository and outside source control. It contains the existing Meridian files plus a Helix-owned `helix.yaml` file. The implementation may load only the profile path explicitly passed through `--profile` or `HELIX_CLIENT_PROFILE`; it must never search a home directory, repository tree, or environment for a profile.
+A client profile is a directory outside the Helix repository and outside source control. It contains the Helix-owned `helix.yaml` file. The implementation may load only the profile path explicitly passed through `--profile` or `HELIX_CLIENT_PROFILE`; it must never search a home directory, repository tree, or environment for a profile.
 
 Required directory shape:
 
 ```text
 <client-profile>/
-  tenant.yaml
-  environments.yaml
-  compare.yaml
-  .env
   helix.yaml
 ```
 
-`tenant.yaml`, `environments.yaml`, `compare.yaml`, and `.env` remain Meridian-owned inputs. Helix must not rewrite them. `helix.yaml` is Helix-owned, contains no secret value, and references a vault scope rather than a secret name or value.
+Helix reads no other file in the directory, including any `.env`. `helix.yaml` contains no secret value, and references a vault scope rather than a secret name or value.
 
 ## `helix.yaml` contract, version 1
 
@@ -110,7 +107,7 @@ The loader and doctor must apply the following rules in stable order. Each faile
 
 | ID | Rule | Severity |
 | --- | --- | --- |
-| B1-001 | All five required files exist and are regular files. | error |
+| B1-001 | `helix.yaml` exists and is a regular file. | error |
 | B1-002 | `helix.yaml` parses and has `schema_version: 1`. | error |
 | B1-003 | `client_id` is present and matches `^[a-z0-9]+(?:-[a-z0-9]+)*$`. | error |
 | B1-004 | Model provider, region, phase models, run cap, and phase cap are present; all caps are positive and the phase cap does not exceed the run cap. | error |
@@ -124,7 +121,6 @@ The loader and doctor must apply the following rules in stable order. Each faile
 | B1-012 | Connected-app expiry is in the future and within the warning horizon. Expired is an error; expiry within 30 days is a warning. | error / warning |
 | B1-013 | Design defaults and each of the four gate-owner lists are present and non-empty. | error |
 | B1-014 | The profile contains no plaintext secret based on key-name and value-shape detection. A finding must name the field path but never echo the value. | error |
-| B1-015 | The referenced Meridian files are structurally parseable by the pinned Meridian interface. | error |
 
 The implementation must define a local, versioned policy table for provider/residency compatibility and production-like environment aliases. It must record the policy-table version in doctor output.
 
@@ -173,8 +169,8 @@ JSON result contract:
 Claude Code must implement automated tests for:
 
 1. A complete synthetic profile returning healthy.
-2. Each missing required profile file producing its matching rule id.
-3. Each required `builder.yaml` section omitted independently.
+2. A missing `helix.yaml` producing B1-001.
+3. Each required `helix.yaml` section omitted independently.
 4. Production-like environments rejected, including casing variants.
 5. Expired, soon-to-expire, and sufficiently future expiries.
 6. A forbidden model-route/residency combination rejected through the local policy table.
@@ -200,7 +196,7 @@ B1 is complete when:
 
 ## Architectural challenges to resolve during implementation
 
-1. **Meridian contract:** pin the Meridian version and prove the parser boundary through an adapter, rather than exposing Meridian internals across Helix.
+1. **Standalone boundary:** Helix has no link to Meridian (owner decision, 2026-10-09). The former rule B1-015 (Meridian file parsing) is withdrawn and its id is not reused.
 2. **Profile migration:** define only additive schema evolution until a migration command and rollback policy exist.
 3. **Policy ownership:** the provider/residency policy table needs a named owner and release process before it can decide production eligibility.
 4. **Secret detection:** detection is a tripwire, not proof of absence. It must remain conservative and never cause sensitive output.

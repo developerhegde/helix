@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "helix"
 dynamic = ["version"]
-requires-python = "==3.12.*"
+requires-python = "==3.14.*"
 # B1 needs only PyYAML; the LLD 01 §3.2 dependencies land with the sub-phases that use them.
 dependencies = ["PyYAML"]
 

@@ -1,8 +1,8 @@
-"""Offline, read-only profile doctor: rules B1-001 to B1-015 in stable order.
+"""Offline, read-only profile doctor: rules B1-001 to B1-014 in stable order.
 
-Reads only the five files of the profile directory it is given. It makes no
-network call, resolves no vault reference, never loads ``.env`` into the process
-environment, and never puts a profile value into a finding.
+Reads only the profile file in the directory it is given. It makes no network
+call, resolves no vault reference, reads no ``.env``, and never puts a profile
+value into a finding.
 """
 
 from __future__ import annotations
@@ -17,13 +17,12 @@ from typing import Any, Dict, List, Optional, Tuple
 import yaml
 
 from .. import product_identity as pid
-from ..meridian_bridge import profile_files as meridian
 from . import secrets
 from .policy import DEFAULT_POLICY, Policy
 
 PROFILE_SCHEMA_VERSION = 1
 REPORT_SCHEMA_VERSION = 1
-REQUIRED_FILES = meridian.FILES + (pid.PROFILE_FILENAME,)
+REQUIRED_FILES = (pid.PROFILE_FILENAME,)
 DEFERRED_CHECKS = ("vault", "jira", "github", "anypoint", "nexus", "model_route")
 
 PROVIDERS = ("anthropic", "bedrock", "vertex")
@@ -41,7 +40,7 @@ _LABEL = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
 HOST_RE = re.compile(rf"^(?:https://)?({_LABEL}(?:\.{_LABEL})+)$")
 
 REMEDIATION = {
-    "B1-001": "Add the file to the profile directory; Meridian's files come from `meridian init`.",
+    "B1-001": f"Add {pid.PROFILE_FILENAME} to the profile directory.",
     "B1-002": f"Write {pid.PROFILE_FILENAME} as a YAML mapping with schema_version: {PROFILE_SCHEMA_VERSION}.",
     "B1-003": "Set client_id to lowercase letters and digits joined by single hyphens.",
     "B1-004": "Set provider, region, a model per phase, and positive caps with phase_cap_usd not above run_cap_usd.",
@@ -55,7 +54,6 @@ REMEDIATION = {
     "B1-012": "Rotate the connected-app secret and update its expiry metadata.",
     "B1-013": "Set the design defaults and at least one owner for each gate.",
     "B1-014": "Remove the value, keep it in the vault, and leave only a vault:// reference in the profile.",
-    "B1-015": f"Regenerate the file with Meridian {meridian.MERIDIAN_INTERFACE_VERSION} `meridian init`.",
 }
 
 
@@ -355,31 +353,9 @@ def evaluate(profile_dir: str, *, now: Optional[datetime] = None,
     supported = doc is not None and not any(f.id == "B1-002" for f in c.findings)
     client_id = _check_profile(doc, c, policy, now) if supported else None
 
-    parsed: Dict[str, Any] = {}
-    structure: List[Tuple[str, str]] = []
-    for name in meridian.FILES:
-        if name not in texts:
-            continue
-        if texts[name] is None:
-            structure.append((name, "File is not UTF-8 text."))
-            continue
-        parsed[name], problems = meridian.parse_file(name, texts[name])
-        structure.extend(problems)
-
     # B1-014 plaintext secrets; paths only, never values
-    hits = secrets.scan(doc) if doc is not None else []
-    for name in meridian.FILES:
-        data = parsed.get(name)
-        if data is None:
-            continue
-        found = (secrets.scan_dotenv(data, meridian.CREDENTIAL_KEYS) if name == meridian.DOTENV_FILE
-                 else secrets.scan(data))
-        hits.extend(f"{name}:{path}" for path in found)
-    for path in hits:
+    for path in secrets.scan(doc) if doc is not None else ():
         c.add("B1-014", path, "Field holds what looks like a plaintext secret.")
-
-    for path, message in structure:  # B1-015
-        c.add("B1-015", path, message)
 
     return Report(client_id, policy.version, tuple(c.findings)), doc if supported else None
 
