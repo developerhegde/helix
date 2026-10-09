@@ -42,6 +42,7 @@ This expands 00 §3. Owner is the LLD file that defines the module's behaviour.
 | `pyproject.toml`, `uv.lock` | Packaging and the exact environment (§3.2) | 01 | B1 |
 | `vendor/meridian-1.8.1-py3-none-any.whl`, `vendor/meridian-1.8.1-requirements.lock`, `vendor/SHA256SUMS` | The pinned Meridian wheel (hash also in `uv.lock`) and Meridian's tested dependency lock at the same tag, used as a constraints file (§3.2) | 01 | B1 |
 | `src/helix/__init__.py` | `__version__`, written in one place only (Meridian's rule, `meridian/__init__.py:8-15`) | 01 | B1 |
+| `src/helix/product_identity.py` | Product identity manifest: display name, canonical identifier and derived naming tokens; the only code-owned source for renameable identifiers (00 §3) | 01 | B1 |
 | `src/helix/__main__.py` | `python -m helix` → `cli.main.main` | 01 | B1 |
 | `src/helix/config.py` | `RuntimeConfig.from_env()`: the `HELIX_*` variables, read at call time (§3.3) | 01 | B1 |
 | `src/helix/runtime_identity.py` | `process_nonce()`: a UUIDv4 made on the first call in an interpreter and cached, so two `main()` calls in one process return the same value (§3.9, G26) | 01 | B2 |
@@ -439,7 +440,7 @@ Rules:
 
 03 §3.2 follows this choice. The alternative, GitHub-hosted runners, is the owner's to choose (§6). It would expose the paths 03 §3.2.1 lists, every client statement would list 10's `actions_runner` hop as outside the guarantee, and lint rule L5 would change. In this design, L5 refuses any GitHub-hosted label.
 
-**Why not `claude-code-action`** `[HLD-P#4]` `[HLD-P#1]`. This **contradicts a `[PLAN]` fact**: the plan names the pilot runner "a GitHub Action (`claude-code-action`)" (plan §3.2; HLD *Runtime* table). An owner decision is required (§6). Two reasons drive it. HLD-P#4 requires separate agent and control-plane jobs, a scrubbed agent environment and an environment test over every credential name. 00 §9 `[HLD-P#1]` requires the agent to start with an exhaustive environment, and `claude-code-action` runs its agent inside the job's own environment `[VERIFY]`. Parity `[PLAN]` also asks the Action to run the same `helix build` and `helix test` CLIs as a terminal. Each property the plan relies on is replaced as follows:
+**Why not `claude-code-action`** `[HLD-P#4]` `[HLD-P#1]`. **Owner decision: plain workflow steps calling `helix run` replace `claude-code-action` for the B2 pilot.** The original plan names the action, but the separate control-plane and agent jobs are required to prove the scrubbed agent environment and credential boundary. Two reasons drive it. HLD-P#4 requires separate agent and control-plane jobs, a scrubbed agent environment and an environment test over every credential name. 00 §9 `[HLD-P#1]` requires the agent to start with an exhaustive environment, and `claude-code-action` runs its agent inside the job's own environment `[VERIFY]`. Parity `[PLAN]` also asks the Action to run the same `helix build` and `helix test` CLIs as a terminal. Each property the plan relies on is replaced as follows:
 
 | Property the plan relies on | In `claude-code-action` | Replacement here | Held by |
 | --- | --- | --- | --- |

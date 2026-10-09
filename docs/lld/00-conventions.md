@@ -2,7 +2,7 @@
 
 Every other file in `lld/` uses the names, enums, schemas and credential model defined here. If a section file needs a new shared identifier, it is added here first.
 
-Sources: [`ai-builder-plan.md`](../../ai-builder-plan.md) (the plan, also at `meridian/docs/ai-builder-plan.md`) and [`ai-builder-hld.md`](../../ai-builder-hld.md) (the HLD, including its *Design gaps and proposed resolutions* table) at this repository's root, which call the product *the builder*; and, outside this repository, the Meridian source tree (`meridian/`, the `meridian` package) for every interface Helix imports or runs.
+Sources: [`ai-builder-plan.md`](../../ai-builder-plan.md) (the plan) and [`ai-builder-hld.md`](../../ai-builder-hld.md) (the HLD, including its *Design gaps and proposed resolutions* table) at this repository's root; and, outside this repository, the Meridian source tree (`meridian/`, the `meridian` package) for every interface Helix imports or runs.
 
 ## 1. Status tags
 
@@ -34,7 +34,9 @@ Default model for every phase is `claude-opus-5-5`; the profile may set a differ
 
 ## 3. Repository layout `[PLAN-DEFAULT 5]` `[LLD]`
 
-The package is named `helix`, the product's name (decision 9, answered on 2026-10-09; the plan's placeholder was *the builder*).
+The product display name is **Helix** and its canonical technical identifier is `helix`. Product-facing prose uses `Helix`; packages, console commands, environment-variable prefixes, container paths, image names, branch prefixes, and generated operational identifiers use the canonical identifier. A future rename changes the product-identity manifest and its generated consumers, rather than scattering literal names through the implementation.
+
+**Product identity manifest** `[LLD]`. `src/helix/product_identity.py` is the sole source of truth for the display name, canonical identifier, environment-variable prefix, container-path segment, branch prefix, and default image-name prefix. Code, template rendering, CLI banners, generated Jira text, and image metadata import or render from it. A guard rejects a product-name literal outside this module, packaging metadata, immutable documentation/history, and fixture assertions. Renaming is a deliberate migration: update the manifest, package metadata, and generated templates; regenerate checked templates; migrate external identifiers only when each client is re-onboarded; retain the previous identifier as an accepted read-only alias only when an explicit migration requires it.
 
 ```
 helix/                          repository root (new repository)

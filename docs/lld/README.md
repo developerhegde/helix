@@ -1,6 +1,6 @@
 # Helix — low-level design
 
-This LLD refines the [high-level design](https://claude.ai/code/artifact/079f03ac-c7a6-4776-989d-83eb47cf297b) (exported in this repository as [`ai-builder-hld.md`](../../ai-builder-hld.md)) of Helix. Helix takes a Jira Cloud ticket and turns it into a reviewed GitHub pull request for a Mule 4.9 application. It runs beside Meridian 1.8.1 and imports it. The plan, [`ai-builder-plan.md`](../../ai-builder-plan.md), is the source of truth; the plan and the HLD call the product *the builder*, its name until decision 9 named it Helix.
+This LLD refines the [high-level design](https://claude.ai/code/artifact/079f03ac-c7a6-4776-989d-83eb47cf297b) (exported in this repository as [`ai-builder-hld.md`](../../ai-builder-hld.md)) of Helix. Helix takes a Jira Cloud ticket and turns it into a reviewed GitHub pull request for a Mule 4.9 application. It runs beside Meridian 1.8.1 and imports it. The plan, [`ai-builder-plan.md`](../../ai-builder-plan.md), is the source of truth; **Helix** is the product name.
 
 Every design decision carries a status tag (`00-conventions.md` §1). Items tagged `[HLD-P#n]` resolve a design gap the HLD found. They are proposals that wait on the owner's approval, and `[VERIFY]` marks an external product fact to confirm before it is relied on. Nothing is built yet.
 
@@ -35,7 +35,7 @@ These are on top of plan decisions 5–12 and the HLD gaps. The first two change
 
 | Decision | Default in this LLD | Where |
 | --- | --- | --- |
-| Run the pilot with plain workflow steps calling `helix run` instead of `claude-code-action` | Plain steps, so the sandbox environment stays exhaustive (HLD-P#1, #4) | 01 §3.8 |
+| Run the pilot with plain workflow steps calling `helix run` instead of `claude-code-action` | **Decided:** plain steps, so the sandbox environment stays exhaustive (HLD-P#1, #4) | 01 §3.8 |
 | Write `deployment_properties` at gate 3 rather than at build | Gate 3 | 02 §3.10, 06, 07 |
 | Pilot repository and runners | Client's organisation, owner-run self-hosted runners in the client's region | 01 §3.8 |
 | Pilot dispatch credential | The GitHub App's narrowed token | 01 §3.8, 02, 03 §3.2 |

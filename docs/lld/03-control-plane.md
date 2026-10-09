@@ -113,7 +113,7 @@ flowchart LR
   WH & CW & BR & GW & MP --> VA
 ```
 
-**Runtimes by sub-phase.** B2 is file 01's GitHub Action on self-hosted runners, with Jira as the only execution state `[PLAN]` (01 §3.8). From B3, file 08's `routing.route` decides per ticket (08 §3.16): a B2 ticket finishes on the pilot, and a new ticket runs under file 08's driver inside this file's service, HLD-P#12's minimal control-plane service, until the client's cutover to Temporal `[HLD-P#12]`. B5 is Temporal `[PLAN]`.
+**Runtimes by sub-phase.** B2 is file 01's GitHub Action on self-hosted runners. Jira remains the human workflow surface; the pilot's `run_state.v1`, durable run artefacts, and control-plane store record execution state. From B3, file 08's `routing.route` decides per ticket (08 §3.16): a B2 ticket finishes on the pilot, and a new ticket runs under file 08's driver inside this file's service, HLD-P#12's minimal control-plane service, until the client's cutover to Temporal `[HLD-P#12]`. B5 is Temporal `[PLAN]`.
 
 | Concern | B2 pilot (route `action`) | B3–B4 driver (route `controlplane`) | B5 (route `temporal`) | Tag |
 | --- | --- | --- | --- | --- |

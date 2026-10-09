@@ -41,7 +41,7 @@ Until decision 6 is answered, the owner signs all four for the pilot, which the 
 
 Helix has three trust zones: hosts where humans sign, a control plane that holds the Jira, GitHub and Anypoint credentials and does every exchange, and an agent sandbox that holds no client secret.
 
-![Builder architecture: 3 trust zones](hld-diagrams/architecture.png)
+![Helix architecture: 3 trust zones](hld-diagrams/architecture.png)
 
 In the B5 target, Jira and GitHub talk only to the control plane; in the B2 pilot the agent run is itself a GitHub Action woken by the listed bots. Agents receive text and at most one short-lived credential for their phase. Discover reads Anypoint under the client's connected app, outside the sandbox; agents read Exchange through the DX MCP Server, a local process, if the spike passes, and otherwise through the Anypoint CLI or the Developer Hub APIs; connector operations come from describe-connector either way. The EE Nexus credential sits in a Maven settings file outside the agent's working tree.
 
@@ -122,7 +122,7 @@ The fact sheet is the hinge: the intake agent writes it from untrusted text, a h
 
 | Object | Written by | Read by | Contents | Kept in |
 | --- | --- | --- | --- | --- |
-| Client profile | Onboarding: Meridian `init` plus `builder.yaml` | Loader, doctor, every phase | Meridian's `tenant.yaml`, `environments.yaml`, `compare.yaml`, `.env`; model route and caps, data rules, bots, vault scope, design standards, gate owners | Per-client directory, gitignored |
+| Client profile | Onboarding: Meridian `init` plus `helix.yaml` | Loader, doctor, every phase | Meridian's `tenant.yaml`, `environments.yaml`, `compare.yaml`, `.env`; model route and caps, data rules, bots, vault scope, design standards, gate owners | Per-client directory, gitignored |
 | Discover findings | Discover activity | Intake agent as text, design agent | Exchange search, connector operations, tenant facts | Handed over per run |
 | Fact sheet | Intake agent, as text | Gate 1 signer, design, build and test agents | Source, target, trigger, volume, SLA, error handling, security, mapping, environments; each known, assumed or missing, with the source of each known fact; an assumed fact is never promoted | A file per ticket |
 | Question set | Intake agent, as text | Requester | One numbered set per round, only facts still missing | One Jira comment, ticket moved to *Needs info* |
