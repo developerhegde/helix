@@ -47,7 +47,47 @@ anypoint:
 design:
   contract_format: oas3
   governance_ruleset: anypoint-best-practices-1.6.5
-  logging: core-logger-mdc
+  logging: json-logger-module
+naming:
+  schema_version: 1
+  application:
+    separator: "-"
+    repository:
+      parts: [prefix, scope, region, name, layer, version]
+    deployed:
+      parts: [prefix, scope, region, name, layer, version, environment]
+    allowed:
+      prefix: [acme]
+      scope: [src, run]
+      region: [glb, euw]
+      layer: [exp, prc, sys]
+    version_pattern: "v[1-9][0-9]*"
+    name_pattern: "[a-z][a-z0-9-]{1,48}"
+  environments:
+    - key: DEV
+      suffix: dev
+      order: 10
+      production: false
+    - key: SIT
+      suffix: sit
+      order: 20
+      production: false
+    - key: PROD
+      suffix: prod
+      order: 90
+      production: true
+  configuration:
+    directory: src/main/resources/config
+    base_file: config.yaml
+    environment_file: config-{environment}.yaml
+    secure_environment_file: config-secure-{environment}.yaml
+    test_directory: src/test/resources/config
+    test_file: config-munit.yaml
+    secure_test_file: config-secure-munit.yaml
+standards:
+  path: standards/bundle.yaml
+  version: 1.0.0
+  sha256: 3f4f48cff6b9ddb04e29742a823844dfd3f9361177e10a2d9d08b8ba4316ee03
 gates:
   requirement:
     - acme-architect@example.invalid

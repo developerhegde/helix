@@ -8,13 +8,14 @@ from datetime import datetime
 from typing import List, Optional
 
 from .. import product_identity as pid
-from . import doctor
+from . import doctor, validate
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog=pid.CANONICAL_ID)
     sub = parser.add_subparsers(dest="command")
     doctor.add_parser(sub)
+    validate.add_parser(sub)
     return parser
 
 

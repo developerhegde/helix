@@ -2,7 +2,7 @@
 
 Every other file in `lld/` uses the names, enums, schemas and credential model defined here. If a section file needs a new shared identifier, it is added here first.
 
-Sources: [`ai-builder-plan.md`](../../ai-builder-plan.md) (the plan) and [`ai-builder-hld.md`](../../ai-builder-hld.md) (the HLD, including its *Design gaps and proposed resolutions* table) at this repository's root; and, outside this repository, the Meridian source tree (`meridian/`, the `meridian` package) for every interface Helix imports or runs.
+Sources: [`ai-builder-plan.md`](../../ai-builder-plan.md) and [`ai-builder-hld.md`](../../ai-builder-hld.md) at this repository's root, plus the standalone architecture decisions in `docs/architecture/`. The standalone decisions govern B1–B5 where they differ from the historic plan or HLD. Meridian is not an input to core behavior; any future integration is optional and must be isolated behind a version-pinned adapter contract.
 
 ## 1. Status tags
 
@@ -20,8 +20,8 @@ Every design decision in the LLD carries one tag, so a reader can tell what is s
 
 | Item | Choice | Tag |
 | --- | --- | --- |
-| Helix language | Python 3.14 (Meridian is Python; imported as a wheel) | `[LLD]` |
-| Meridian | Version-pinned wheel; only `meridian_bridge` imports it | `[PLAN-DEFAULT 5]` |
+| Helix language | Python 3.14 | `[LLD]` |
+| Meridian | Not a B1–B5 dependency. A future opt-in adapter must declare a supported version, expose a narrow contract, and pass adapter contract tests. | Standalone architecture decision |
 | Orchestration | Temporal (MIT), Python SDK | `[PLAN]` |
 | Agent runtime | Claude Agent SDK for Python (`claude-agent-sdk`) | `[PLAN]` |
 | Model gateway | Anthropic Python SDK (`anthropic`): `Anthropic`, `AnthropicBedrockMantle`, `AnthropicVertex` clients | `[HLD-P#2]` |
@@ -40,10 +40,11 @@ The product display name is **Helix** and its canonical technical identifier is 
 
 ```
 helix/                          repository root (new repository)
-  pyproject.toml                  pins meridian==<version>, anthropic, claude-agent-sdk, temporalio
+  pyproject.toml                  Python package metadata and direct dependencies
   src/helix/
     cli/                          `helix` entry point and sub-commands (section 4)
     profile/                      schema, loader, doctor
+    naming.py                     standalone naming_contract.v1 compiler and renderer
     controlplane/
       webhook/                    receiver, HMAC, dedup, routing
       jira/                       REST client, status mapping, comment templates
@@ -58,9 +59,9 @@ helix/                          repository root (new repository)
       definitions/{intake,design,build,test}/   system prompt, tool policy, skills list
     phases/                       discover, intake, design, build, test, pr: one module per CLI
     orchestration/                Temporal workflow, activities, worker bootstrap
-    audit/                        runlog wrapper, chain anchoring
+    audit/                        Helix-owned append-only audit chain and anchors
     metering/                     meter events, pricing, caps
-    meridian_bridge/              the only package that imports meridian
+    validation/                   standalone B2 project and design validators
     schemas/                      JSON Schemas listed in section 8
   skills/                         skills files mounted read-only into agent sandboxes
   templates/                      golden parent pom, property files, PR body, integration HLD/LLD templates
@@ -87,14 +88,15 @@ Every phase is a CLI; the GitHub Action, the Temporal activity and a terminal ru
 | --- | --- | --- | --- |
 | `helix profile validate` | anywhere | Schema and completeness check of a profile | 02 |
 | `helix doctor` | control plane | All onboarding checks, numbered | 02 |
-| `helix discover` | control plane | Exchange, `describe-connector`, Meridian tenant reads | 05 |
+| `helix discover` | control plane | Exchange and connector discovery through explicit client adapters | 05 |
 | `helix intake-prepare` | control plane | Classifies the wake and writes intake's inputs from the receiver's snapshot; no Jira call | 05 |
 | `helix intake` | agent worker | Intake agent session | 05 |
 | `helix intake-apply` | control plane | Admits answers, merges the ledger, then posts and transitions through file 03's Jira client | 05 |
 | `helix design` | agent worker | Design agent session, then ruleset check | 06 |
-| `helix build` | agent worker | Build agent session, then `mvn clean package` and `report` | 07 |
+| `helix build` | agent worker | Build agent session, then Maven and standalone validation | 07 |
 | `helix test` | agent worker | Test agent session, coverage, mutation check | 07 |
-| `helix verify --stage {build,test,head}` | agent worker, no agent session | Independent verification: Maven, `report`, key list, mutation, secret scan | 07 |
+| `helix verify --stage {build,test,head}` | agent worker, no agent session | Independent Maven, naming, property, secret and generated-tree validation | 07 |
+| `helix validate` | agent worker or control plane, no agent session | Run the standalone B2 project validator against an approved design bundle | B2 validation decision |
 | `helix pr` | control plane | Git writer: branch, commit, pull request, ticket link | 07 |
 | `helix run` | terminal or Action | Runs a ticket's phases in order without Temporal (B2 pilot, parity) | 01 |
 | `helix webhook serve` | control plane | Webhook receiver | 03 |
@@ -110,7 +112,7 @@ Every phase is a CLI; the GitHub Action, the Temporal activity and a terminal ru
 
 ## 5. Exit codes and phase outcomes
 
-Exit codes are Meridian's `[PLAN]`: **0** nothing owed, **1** findings, **2** error. Doing nothing is never 0; a check that could not run is reported INCOMPLETE.
+Exit codes are **0** nothing owed, **1** findings or an incomplete required check, and **2** an operational error. Doing nothing is never 0; a check that could not run is reported INCOMPLETE.
 
 The workflow does not branch on exit codes; each phase CLI also writes a `PhaseOutcome` into `phase_result.v1` `[HLD-P#17]`:
 
@@ -151,9 +153,8 @@ The profile maps each logical ticket state, except those reserved for B6, to the
 
 | What | Where | Tag |
 | --- | --- | --- |
-| Client profile | `$HELIX_PROFILES_ROOT/{client_id}/` holding `tenant.yaml`, `environments.yaml`, `compare.yaml`, `.env`, `helix.yaml` and `standards/` (the client's design standards, files 02 and 06); gitignored | `[PLAN]`; `standards/` `[LLD]` |
-| Meridian state | `$HELIX_STATE_ROOT/{client_id}/meridian/`, exported as `MERIDIAN_HOME`; durable storage. The plan names `MERIDIAN_STATE_DIR`, but Meridian 1.8.1 reads only `MERIDIAN_HOME` (`meridian/settings.py:74`); Helix never sets `MERIDIAN_STATE_DIR` | `[PLAN]` location, Meridian source for the name |
-| Run artefacts | `$HELIX_STATE_ROOT/{client_id}/runs/{ticket_key}/`: `discover.json`, `fact-sheet.json`, briefs, results, tool logs, reports; durable | `[LLD]` |
+| Client profile | `$HELIX_PROFILES_ROOT/{client_id}/` holding `helix.yaml` and versioned `standards/` bundle material; gitignored | Standalone architecture decision |
+| Run artefacts | `$HELIX_STATE_ROOT/{client_id}/runs/{ticket_key}/`: briefs, approved bundles, results, tool logs, reports and validation evidence; durable | `[LLD]` |
 | Helix store | PostgreSQL database `helix`; every table carries `client_id` with row-level security per client | `[LLD]` |
 | Activity workdir | `/work/{phase_attempt_id}/`: ephemeral, destroyed after the activity | `[HLD-P#13]` |
 | Attempt spool | `$HELIX_SPOOL_ROOT/{client_id}/{attempt_id}/` with `in/` and `out/`, `attempt_id` being the `phase_attempt_id` or `verify_attempt_id`: plain files moved between the run directory and the agent host; an export separate from `$HELIX_STATE_ROOT`, which the agent host never mounts; ephemeral per attempt (file 08) | `[LLD]` |
@@ -166,6 +167,9 @@ All JSON documents carry `"schema": "<name>"` and are validated on read and writ
 | Schema | Owner | Purpose |
 | --- | --- | --- |
 | `helix_profile.v1` (`helix.yaml`) | 02 | Per-client Helix configuration |
+| `naming_contract.v1` | B2 naming decision | Immutable compiled naming, environment and configuration-path contract |
+| `client_standards_bundle.v1` | Client standards bundle decision | Approved machine-readable client engineering standards |
+| `validation_policy.v1`, `validation_report.v1` | B2 validation decision | Immutable validator policy and deterministic local validation evidence |
 | `phase_brief.v1`, `phase_result.v1` | 04 | Input and output envelope of every phase CLI |
 | `discover_findings.v1` | 05 | Discover output |
 | `fact_sheet.v1` | 05 | The confirmed or draft fact sheet |
@@ -176,7 +180,7 @@ All JSON documents carry `"schema": "<name>"` and are validated on read and writ
 | `build_report.v1`, `test_report.v1` | 07 | Build and test evidence |
 | `pr_provenance.v1` | 07 | Provenance block in the PR body |
 | `webhook_delivery` table, `ticket_event.v1` | 03 | Inbound events after verification |
-| `audit_event.v1` | 09 | Record shape written through `runlog.RunLog` |
+| `audit_event.v1` | 09 | Helix-owned append-only audit record |
 | `meter_event.v1` | 09 | One record per model call |
 | `gate_approval` table | 08 | Gate decisions with the digest of what was approved |
 | `run_state.v1` | 01 | `helix run` progress record for the pilot and terminal parity |
@@ -218,8 +222,6 @@ Three process classes. Credentials never cross from the first into the second `[
 | Webhook HMAC secret | Webhook receiver, one per client | — | Vault rotation | Never | `[PLAN]` HMAC, `[HLD-P lower]` per client |
 | Deploy-capable credential | Nothing in B1–B5; the doctor refuses one | — | — | Never | `[PLAN]` |
 
-**Meridian's environment exports** `[PLAN]` exports, `[HLD-P#1]` placement. The plan's list is `MERIDIAN_TENANT_PROFILE`, `MERIDIAN_ENVIRONMENT_MAP`, `MERIDIAN_COMPARE_CONFIG`, `MERIDIAN_HOME` in place of the plan's `MERIDIAN_STATE_DIR`, `MERIDIAN_ENV_ALLOWLIST`, `MERIDIAN_AUTH_MODE=connected_app`, `ANYPOINT_CLIENT_ID` and `ANYPOINT_CLIENT_SECRET`. Helix adds `MERIDIAN_READ_ONLY=1`, `MERIDIAN_BROWSER_SSO=0`, `PYTHON_KEYRING_BACKEND` (the `keyring` null backend, `[VERIFY]` name) and, in control-class processes only, `MERIDIAN_ACTOR` (file 09's value) `[LLD]`. File 01 §3.5.2 owns the table per command: each Meridian subprocess gets an environment built from scratch, never inherited. The connected-app pair goes only into the environment of the one credentialed CLI, `tenant discover`, for that call, never into any process's `os.environ`. The other exports are set in control-plane processes; outside the control plane they reach only a subprocess's own `env`, never a process's `os.environ`. In the agent sandbox the only such subprocesses are the uncredentialed `report` and `prepare` that file 07 runs while no agent process exists; they receive the non-credential exports other than `MERIDIAN_ACTOR` `[HLD-P#1]` `[LLD]`, and the agent's allowlist below is unchanged.
-
 **Agent sandbox environment — exhaustive allowlist** `[HLD-P#1]` `[HLD-P#2]`. The runner starts the Agent SDK with exactly these variables and nothing inherited:
 
 | Variable | Value | Phases |
@@ -233,6 +235,8 @@ Three process classes. Credentials never cross from the first into the second `[
 | `ANYPOINT_BEARER` | Broker-issued bearer | build, only on the DX MCP route |
 
 The intake agent's allowlist is the *all* rows only: it carries no Anypoint, Jira, GitHub or Nexus credential `[PLAN]`.
+
+**Optional future Meridian adapter.** If adopted, an adapter runs only outside core B1–B5 processes, receives explicit staged inputs, exposes no raw profile or environment data to agents, declares a supported Meridian version, and is covered by adapter contract tests. It is not a fallback for `helix.naming`, `helix validate`, profile loading, audit, or policy enforcement.
 
 ## 10. Verified Agent SDK facts (for files 04 and 08)
 

@@ -8,7 +8,7 @@ This file owns `audit_event.v1`, `meter_event.v1` and the commands `helix audit 
 
 | Sub-phase | What lands from this file |
 | --- | --- |
-| B2 | Audit chain written through Meridian's `RunLog` into `$HELIX_STATE_ROOT/{client_id}/meridian/` on the pilot host's local block storage, mounted into both control jobs (01 §3.5.5, 3.3.1); a real ticket runs only on that durable mount `[LLD]`; `helix audit verify`; gateway metering per model call with attempt, run, daily and monthly caps; gate 3 measurement; anchors in the PR body and the merge comment |
+| B2 | Helix-owned append-only audit chain on durable run storage; `helix audit verify`; gateway metering per model call with attempt, run, daily and monthly caps; gate 3 measurement; anchors in the PR body and the merge comment |
 | B3 | Gate 1 measurement and anchor; `comment_posted` (`question_set`), `transition_made` and 05's intake events (3.4) |
 | B4 | Gate 2 measurement and anchor (draft PR from `[HLD-P#7]`) |
 | B5 | The chain stays on durable per-client storage, now file 08's control-plane host under Temporal (the B3–B4 driver already writes there) `[PLAN]` durable storage (plan §3.5); per-run metrics recorded at workflow end; `helix meter report` over many runs |
@@ -20,7 +20,7 @@ This file owns `audit_event.v1`, `meter_event.v1` and the commands `helix audit 
 | Plan §0, *Reviewer minutes are the number* | Every pilot run records the reviewer's minutes | 3.13 |
 | Plan §3.2, *The measurement* | *Accepted* (non-author merge, change requests, hand rewrites) and *reviewer minutes*; a pilot that cannot record the minutes has not run | 3.13, guard G14 |
 | Plan §3.2, *Exits* | A capped run stops and posts one line with where and what it spent | 3.11, section 4 |
-| Plan §3.5, *Writes* | `runlog.py` chain with provenance and agent definition hash; copied into the action log; state in `MERIDIAN_STATE_DIR` on durable storage; the copy migrates, reads never do; `meridian runs --verify`; metering per run and phase; cache hit rate, loops, rework per run | 3.3–3.12 |
+| Audit and metering contract | Helix-owned hash-chain records with provenance, durable storage, independent verification, metering per run and phase, cache hit rate, loops, and rework per run | 3.3–3.12 |
 | Plan §3.5, *Guardrails* | One altered record reports the break at that record; the cap holds at one token over and the next phase never starts | G1, G2, G9 |
 | Plan §4, decisions 6, 11, 12 | Turnaround; dollar cap default; acceptance target | 3.11, 3.13 |
 | Plan §5 | No cryptographic signature on the chain | 3.8 |
@@ -51,7 +51,7 @@ This file owns `audit_event.v1`, `meter_event.v1` and the commands `helix audit 
 | `helix.audit.chain` | Control plane | `ChainWriter`: skips events whose `event_key` is already written (3.3.2), then opens, writes and seals segments; redacts; records segment and event-key rows | `[LLD]` |
 | `helix.audit.events` | Any | Builds and validates `audit_event.v1` dicts; computes `agent_definition_hash` and `prompt_hash` per 3.4 | `[LLD]` |
 | `helix.audit.anchor` | Control plane | Formats anchor lines; writes them through the Jira client and the git writer; parses them back | `[HLD-P lower]` |
-| `helix.audit.verify` | Anywhere that has write access to the client's state directory, or to a copy of it (a restored backup), and the read-only store role `helix_audit_reader` (3.7); `--check-anchors` only in the control plane | `helix audit verify`; wraps `meridian runs --verify` | `[PLAN]` wrap, `[LLD]` the rest |
+| `helix.audit.verify` | Anywhere with read access to durable run records and the read-only store role `helix_audit_reader`; `--check-anchors` only in the control plane | `helix audit verify`; verifies Helix segment hashes, index records and external anchors | `[LLD]` |
 | `helix.metering.pricing` | Control plane | Loads and checks `price_table.v1`; prices one call | `[LLD]` |
 | `helix.metering.caps` | Control plane (`open_phase_attempt` for issuance, the gateway per call) | Issuance, admission and settlement against the attempt, run, client-day and client-month balances (3.11) | `[HLD-P#15]` |
 | `helix.metering.metrics` | Anywhere | Per-run metrics from the store | `[PLAN]` metrics, `[LLD]` formulas |

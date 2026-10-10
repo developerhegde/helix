@@ -2,14 +2,14 @@
 
 ## 1. Purpose and scope
 
-This file designs **B4: design**, the phase between gate 1 (requirement confirmed) and gate 2 (design approved). It takes the confirmed fact sheet, the answer ledger, Discover's findings and the client's design standards. It produces, for the one integration a ticket describes, an API contract at zero ruleset violations, an integration HLD and an integration LLD. Every name in them is rendered by Meridian's grammar and parsed back. It also produces a key list that B2's generated code must later match exactly. The output is `design_bundle.v1`. The git writer commits a complete bundle to a **draft pull request** that the architect reviews at gate 2. A bundle that still needs a pattern choice is presented as templated questions on the ticket, with no pull request. B4 makes no platform write: nothing is published to Exchange (publish is B6). It covers `helix design` (agent worker), its `--validate-only` step (control queue, used only when validation needs a platform login) and its `--recheck` mode (hand edits on the draft PR, no model), the standards conversion each client needs in its first week, the typed wait for a repository that is not onboarded yet, and the gate-2 review surface. It does not cover the git writer's mechanics (file 07), the gate signal plumbing (file 08) or Discover and intake (file 05).
+This file designs **B4: design**, the phase between gate 1 (requirement confirmed) and gate 2 (design approved). It takes the confirmed fact sheet, answer ledger, Discover findings, immutable naming contract, and approved client standards bundle. It produces an API contract, integration HLD and LLD, deterministic names, and a key list B2 must match exactly. Every name is rendered and parsed through `helix.naming`, never inherited from Meridian. The output is `design_bundle.v1`. The git writer commits a complete bundle to a **draft pull request** for gate 2. B4 makes no platform write. It does not cover git-writer mechanics (file 07), gate plumbing (file 08), or intake (file 05).
 
 ## 2. Traceability
 
 | Source | What this file implements |
 | --- | --- |
 | Plan §3.4 (B4) | Inputs, standards as ruleset + skills + decision table, contract first, HLD and LLD contents (including the HLD's statement that B6's publish has no capture proof), naming, key list, *Design review*, rejection loop, the four B4 guards, the two traps |
-| Plan §3.2 | Meridian imports limited to `naming.parse_any_name`, `grammar.Grammar.render`, `runlog.RunLog`; this file's wider imports are `[LLD]` deviations listed for the owner (§6) |
+| Standalone naming decision | All name and configuration-path operations use the immutable `naming_contract.v1` compiled by Helix |
 | Plan §4 decision 7 | OAS 3.0 contract first, Best Practices ruleset at zero violations, fewest layers that give reuse, core Logger with MDC: `[PLAN-DEFAULT 7]` |
 | Plan §3.2 traps, §3.6 | The LLD's deployment-property keys go to `tenant.yaml` `deployment_properties:`; B6 publishes; B6's A10 question on inventory rows |
 | Plan §6 | Versions from Exchange and the pom; provenance on every artefact; doing nothing is never exit 0 |
@@ -439,14 +439,14 @@ A conflict HLD (§3.11.1) has sections 2, 3 and 4 only.
 | 4 Mappings | `MAP-nnn` rows in 07's form (§3.13): kind, source expression → target field and type, transform, DataWeave module, the fact mapping rule each implements | Agent, checked against fact `mapping` |
 | 5 Platform objects | MQ destinations and DLQs, client applications, API instance labels, with names per environment | Code (§3.9) |
 | 6 Property keys per environment | The key list (§3.10): class, type, config file per environment, fixture | Code |
-| 7 Logging | Core Logger with MDC (02 `design_standards.logging: core_logger_mdc`); the MDC keys | `[PLAN-DEFAULT 7]` |
+| 7 Logging | Approved JSON Logger module (02 `design_standards.logging: json_logger_module`); required JSON fields and correlation behavior come from the client standards bundle | Client standards bundle decision |
 | 8 Connectors and external calls | Each connector's group, artifact, version and operations, from Exchange through Discover; the processors that are external calls | Code (§3.13) `[PLAN]` versions from Exchange |
 
 The mapping list (section 4) carries the fields 07's mutation check needs, so control-plane code picks several mutations for B2, rather than the suite's author picking one `[HLD-P lower]`.
 
-### 3.9 Naming: render with Meridian, parse back
+### 3.9 Naming: render with `helix.naming`, parse back
 
-Every application name is rendered by `grammar.Grammar.render`, and every platform object name by `naming.py`. Each is parsed back before use `[PLAN]`. Only the `meridian_bridge` package (`names.py`, `estate.py`) imports Meridian, in the runner process `[PLAN-DEFAULT 5]`.
+Every application name, deployed name, environment suffix, and configuration path is rendered by the immutable `naming_contract.v1` through `helix.naming`. Each rendered application name is parsed back before use. The contract is compiled from `profile.naming`, digested, bound to the design bundle, and is the only naming authority for B1–B5. Platform-object patterns that need client policy are declared in the approved standards bundle; no Meridian module is imported.
 
 **Loading the right grammar.** Meridian binds the naming convention at import (`naming.NAMING = TENANT.naming`, `meridian/naming.py`). If no profile is found, it silently uses built-in defaults (`meridian/tenant.py`, `discover()` then defaults). This file adopts 04 §3.9.2 unchanged `[LLD]`:
 
@@ -639,7 +639,7 @@ Written in the sandbox to `/out/design/design-bundle.json`, collected to `runs/{
 | `platform_objects` | object | *Code*: `mq_destinations[]` with `logical_name`, `names {ENV}`, `dlq_names {ENV}`; `client_applications[]` with `names {ENV}`; `api_instances[]` `{app, labels {ENV}}`, one per application that exposes a contract, labels by `naming.api_instance_label(app, ENV)` for each of `environments[]` `[LLD]` |
 | `keys[]` | array | §3.10 |
 | `deployment_property_keys[]` | string[] | *Code*: keys with `class: deployment` |
-| `standards` | object | `{decision_table_version, logger: "core_logger_mdc", contract_format, layers_policy}`, from 02's `design_standards` |
+| `standards` | object | `{decision_table_version, logger: "json_logger_module", contract_format, layers_policy}`, from 02's `design_standards` |
 | `provenance` | object | `{model, provider, region, prompt_hash, agent_definition_hash, session_id, mode: session\|conflict\|recheck, pr_head_sha, created_at}`; `prompt_hash` and `agent_definition_hash` are 09's shared identifiers with 09's definitions (09 §3.4), copied from the attempt's `phase_result.v1` `agent`; `model`, `provider`, `region`, both hashes and `session_id` are null for `conflict` and `recheck`, where no model ran; `pr_head_sha` is set only for `recheck` `[PLAN]` |
 
 **Gate-2 digest** `[HLD-P#7]`. The bundle has no digest field of its own. Gate 2 binds to the SHA-256 of the bundle file's bytes, as 08 §3.9 says; `phase_result.v1` `outputs.design_bundle.sha256` carries it, and 08 records it as `presented_digest` and `decided_digest`. So the CLI writes the file as canonical JSON (UTF-8, sorted keys, `(",", ":")` separators, one trailing newline), and the same content always has the same bytes. The git writer commits those bytes unchanged. The bundle lists each member's SHA-256 (`contract.sha256`, `documents.*.sha256`) and the `gate1_digest` it consumed, so 08's check on the PR head covers every design file, not only the bundle.
@@ -682,7 +682,7 @@ Example (abbreviated; shown indented for reading, written canonical):
            {"key": "env", "app": "acme-src-glb-order-sync-prc-v1", "class": "deployment", "kind": "property",
             "type": "string", "fixture": "munit", "environments": ["DEV", "SIT"], "read_by": [], "config_file": {}}],
   "deployment_property_keys": ["env"],
-  "standards": {"decision_table_version": "1.0.0", "logger": "core_logger_mdc", "contract_format": "oas30",
+  "standards": {"decision_table_version": "1.0.0", "logger": "json_logger_module", "contract_format": "oas30",
                 "layers_policy": "fewest_with_reuse"}
 }
 ```
@@ -780,7 +780,7 @@ This file reads 02's `design_standards` block and does not redefine it. The keys
 | `design_standards.ruleset` | `{group_id, asset_id, version}`, the ruleset's Exchange coordinates (02; ONB-33 checks they exist) | The Best Practices ruleset and its version | `[PLAN-DEFAULT 7]` |
 | `design_standards.max_ruleset_violations` | const `0` | Pass criterion (§3.7) | `[PLAN-DEFAULT 7]` |
 | `design_standards.layers_policy` | `fewest_with_reuse` \| `api_led_three_layer` | Must agree with the table's layering fallback (§3.5) | `[PLAN-DEFAULT 7]` |
-| `design_standards.logging` | `core_logger_mdc` | `standards.logger` in the bundle; LLD section 7 | `[PLAN-DEFAULT 7]` |
+| `design_standards.logging` | `json_logger_module` | `standards.logger` in the bundle; required fields and module come from the client standards bundle | Client standards bundle decision |
 | `design_standards.skills_file`, `.decision_table` | paths in the profile; `standards/skills.md`, `standards/decision-table.json` in 02's example | Inputs `skills_client`, `decision_table` | `[PLAN-DEFAULT 7]` |
 | `gates.gate2_design.approvers` | list of `person` keys (02 `people`) | Who may approve, reject and resolve | `[HLD-P#7]`, `[PLAN-DEFAULT 6]` |
 | `github.repo_convention`, `github.repositories[]` | 02 | Repository naming and the onboarding check (§3.14) | `[HLD-P#11]` |

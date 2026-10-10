@@ -1,10 +1,10 @@
 # 11 — B6: Deploy interface (sketch)
 
-B6 is not built in this phase `[PLAN]`. This file fixes two things. First, what B1–B5 must reserve so that no B6 answer is closed off. Second, the interfaces B6 will use: Meridian's runner, assertions and security baseline, the Exchange publish, gate 4 and the hand-off. The two questions the plan leaves open are set out as options, not decided.
+B6 is not built in this phase. This file fixes two things: what B1–B5 reserve so deploy remains open, and the future interfaces for Exchange publish, gate 4, security baseline, and hand-off. Any future Meridian integration is optional, version-pinned, adapter-bound, and must not alter B1–B5 standalone behavior.
 
 ## 1. Purpose and scope
 
-Sub-phase **B6**. Scope: the deploy worker class and the `helix deploy` CLI it reserves, gate 4's placement, the Exchange publish, platform objects through `meridian promote`, post-deploy assertions, the security baseline, decision 8's two routes, the key-holder step and the hand-off contract. It also covers confirming deploy-only scope names before any deploy credential exists, and the B1–B5 invariant that nothing holds a deploy-capable credential. Out of scope: anything B6 would size, schedule or operate.
+Sub-phase **B6**. Scope: the deploy worker class and the `helix deploy` CLI it reserves, gate 4's placement, Exchange publish, platform objects through future deployment adapters, post-deploy assertions, the security baseline, decision 8's two routes, the key-holder step and the hand-off contract. It also covers confirming deploy-only scope names before any deploy credential exists, and the B1–B5 invariant that nothing holds a deploy-capable credential. Out of scope: anything B6 would size, schedule or operate.
 
 **Binding part and B6 sketch** `[LLD]`. Only these parts bind B1–B5: 3.1 (what B1–B5 reserve), 3.11 (the invariant and its doctor sub-checks), section 4 (Q1 and Q2, open), the B1–B5 rows of section 5, guards 1–8, 24 and 25, and the "B1–B5 must reserve" rows of open item 8. Sections 3.2 to 3.10, the other rows of sections 5 and 6, and the "B6 sketch" rows of open item 8 are a **B6 sketch, not binding**. They exist to show that the reservations are enough. B6's own design may change any of them, and their identifiers are not proposed to owner files until then.
 

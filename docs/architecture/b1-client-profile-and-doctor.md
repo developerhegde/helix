@@ -89,7 +89,7 @@ anypoint:
 design:
   contract_format: oas3
   governance_ruleset: anypoint-best-practices-1.6.5
-  logging: core-logger-mdc
+  logging: json-logger-module
 gates:
   requirement:
     - architect@example.invalid
@@ -196,7 +196,7 @@ B1 is complete when:
 
 ## Architectural challenges to resolve during implementation
 
-1. **Standalone boundary:** Helix has no link to Meridian (owner decision, 2026-10-09). The former rule B1-015 (Meridian file parsing) is withdrawn and its id is not reused.
+1. **Standalone boundary:** Helix has no link to Meridian in B1 (owner decision, 2026-10-09). The former rule B1-015 (Meridian file parsing) is withdrawn and its id is not reused. A future integration must enter through an explicit, version-pinned adapter contract and an opt-in profile capability; it must not become an implicit B1 dependency.
 2. **Profile migration:** define only additive schema evolution until a migration command and rollback policy exist.
 3. **Policy ownership:** the provider/residency policy table needs a named owner and release process before it can decide production eligibility.
 4. **Secret detection:** detection is a tripwire, not proof of absence. It must remain conservative and never cause sensitive output.

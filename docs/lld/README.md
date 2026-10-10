@@ -1,8 +1,8 @@
 # Helix — low-level design
 
-This LLD refines the [high-level design](https://claude.ai/code/artifact/079f03ac-c7a6-4776-989d-83eb47cf297b) (exported in this repository as [`ai-builder-hld.md`](../../ai-builder-hld.md)) of Helix. Helix takes a Jira Cloud ticket and turns it into a reviewed GitHub pull request for a Mule 4.9 application. It runs beside Meridian 1.8.1 and imports it. The plan, [`ai-builder-plan.md`](../../ai-builder-plan.md), is the source of truth; **Helix** is the product name.
+This LLD refines the [high-level design](https://claude.ai/code/artifact/079f03ac-c7a6-4776-989d-83eb47cf297b) (exported in this repository as [`ai-builder-hld.md`](../../ai-builder-hld.md)) of Helix. Helix takes a Jira Cloud ticket and turns it into a reviewed GitHub pull request for a Mule 4.9 application. It is a standalone product: core B1–B5 behavior owns its contracts and does not require Meridian. A future Meridian integration may exist only behind an explicit, version-pinned adapter. The plan, [`ai-builder-plan.md`](../../ai-builder-plan.md), is historical input; the architecture decisions in `docs/architecture/` supersede it where they deliberately establish the standalone boundary.
 
-Every design decision carries a status tag (`00-conventions.md` §1). Items tagged `[HLD-P#n]` resolve a design gap the HLD found. They are proposals that wait on the owner's approval, and `[VERIFY]` marks an external product fact to confirm before it is relied on. Nothing is built yet.
+Every design decision carries a status tag (`00-conventions.md` §1). Items tagged `[HLD-P#n]` resolve a design gap the HLD found. They are proposals that wait on the owner's approval, and `[VERIFY]` marks an external product fact to confirm before it is relied on. B1 is built; B2 begins with the standalone naming contract, standards bundle, and local project validator.
 
 ## Reading order
 

@@ -17,6 +17,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import yaml
 
 from .. import product_identity as pid
+from ..naming import NamingInvalid, compile_contract
+from ..standards import StandardsInvalid, load as load_standards
 from . import secrets
 from .policy import DEFAULT_POLICY, Policy
 
@@ -54,6 +56,8 @@ REMEDIATION = {
     "B1-012": "Rotate the connected-app secret and update its expiry metadata.",
     "B1-013": "Set the design defaults and at least one owner for each gate.",
     "B1-014": "Remove the value, keep it in the vault, and leave only a vault:// reference in the profile.",
+    "B1-015": "Set a valid standalone naming block with at least two non-production environments.",
+    "B1-016": "Reference an approved local client_standards_bundle.v1 with the matching version and SHA-256 digest.",
 }
 
 
@@ -197,7 +201,7 @@ def _parse_profile(text: Optional[str], c: _Collector) -> Optional[Dict[str, Any
     return doc
 
 
-def _check_profile(doc: Dict[str, Any], c: _Collector, policy: Policy, now: datetime) -> Optional[str]:
+def _check_profile(doc: Dict[str, Any], c: _Collector, policy: Policy, now: datetime, profile_dir: str) -> Optional[str]:
     """B1-003 to B1-013. Returns the client id when it is valid."""
     value = doc.get("client_id")
     client_id = value if isinstance(value, str) and CLIENT_ID_RE.fullmatch(value) else None
@@ -327,6 +331,18 @@ def _check_profile(doc: Dict[str, Any], c: _Collector, policy: Policy, now: date
         for gate in GATES:
             c.strings("B1-013", gates, "gates", gate)
 
+    try:
+        compile_contract(doc.get("naming"))
+    except NamingInvalid:
+        c.add("B1-015", "naming", "Naming block is missing or violates naming_contract.v1.")
+
+    if client_id is not None:
+        reference = doc.get("standards")
+        try:
+            load_standards(profile_dir, client_id, reference)
+        except StandardsInvalid:
+            c.add("B1-016", "standards", "Standards bundle is missing or violates client_standards_bundle.v1.")
+
     return client_id
 
 
@@ -351,7 +367,7 @@ def evaluate(profile_dir: str, *, now: Optional[datetime] = None,
 
     doc = _parse_profile(texts[pid.PROFILE_FILENAME], c) if pid.PROFILE_FILENAME in texts else None
     supported = doc is not None and not any(f.id == "B1-002" for f in c.findings)
-    client_id = _check_profile(doc, c, policy, now) if supported else None
+    client_id = _check_profile(doc, c, policy, now, root) if supported else None
 
     # B1-014 plaintext secrets; paths only, never values
     for path in secrets.scan(doc) if doc is not None else ():

@@ -15,7 +15,7 @@ It does not design the phase CLIs (files 04–07), the webhook receiver, model g
 | Plan §4 decision 6 | Gate owners per client, two business days with a reminder at one (`[PLAN-DEFAULT 6]`) |
 | Plan §4 decision 10 | The optional Draft status as a wait state with its own release signal (3.5, 3.8) (`[PLAN-DEFAULT 10]`) |
 | Plan §4 decision 11 | Run and phase caps (`[PLAN-DEFAULT 11]`) |
-| Plan §5 | One workflow per ticket. The exclusion *several tickets sharing one worker* is read here as: no process that touches a profile, Meridian or agent code serves two tickets. The long-lived per-client pollers of 3.4 do serve several tickets, so this reading is an owner decision (section 6, item 13), not literal compliance |
+| Plan §5 | One workflow per ticket. No process that handles profile-scoped state or agent-written code switches clients; long-lived pollers are client-bound and ephemeral activity units are isolated per attempt. |
 | HLD *Runtime and non-functional design*, *Failure handling*, *Inbound events* | Durable waits, no repeated writes on resume, wrong-actor and unreached-gate refusal decided in one place (3.9.3) |
 | HLD-P#7 | Approved-artefact digest per gate; a stale presentation is refused; changed fact returns to the earliest affected gate and blocks a pending merge; approver lists and separation of duties |
 | HLD-P#8 | A head pushed after review is re-verified before a merge counts (3.5 `verifying`, 3.6 `run_verify_head`) |
@@ -42,7 +42,7 @@ All under `src/helix/orchestration/` `[LLD]`.
 | `machine.py` | Pure function `transition(state, event) -> list[Step]`. No I/O, no clock, no randomness. Shared by the Temporal workflow and the pre-Temporal driver (3.16). For the outcome-to-next-phase table it calls file 01's `orchestration/transitions.py` `next_step`, which `helix run` also calls, so all three runners take the same phase decisions (G20) |
 | `types.py` | Dataclasses: `TicketWorkflowInput`, `TicketWorkflowState`, `TicketSignal`, `AttemptTicket`, `VerifyTicket`, `PhaseResultRef`, `GateVerdict`, `WorkflowStatus` |
 | `workflow.py` | `TicketWorkflow`: the deterministic loop that feeds events to `machine.transition` and executes the returned steps as activities, waits and timers |
-| `activities_control.py` | Control-queue activities (3.6). Each one that touches a profile, Meridian or the audit chain runs `helix orchestration step` or a phase CLI as a fresh subprocess (3.14); the store-only activities (`load_run_counters`, `acquire_agent_slot`, `project_ticket_run`) run in-process |
+| `activities_control.py` | Control-queue activities (3.6). Each profile-scoped phase or audit action runs in a fresh subprocess with immutable staged inputs; store-only activities (`load_run_counters`, `acquire_agent_slot`, `project_ticket_run`) run in-process |
 | `steps.py` | The `helix orchestration step NAME` command: one entry per control step, JSON in, JSON out (3.6) |
 | `activities_agent.py`, `launcher.py` | `run_agent_phase` and `run_verify_head`: lease redemption, one ephemeral container and one egress guard (03 §3.10) per activity, spool transfer, launch evidence (3.4, 3.15). The same launcher serves the driver's agent jobs (3.16) |
 | `slots.py` | Per-client agent slots (3.11) |

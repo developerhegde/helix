@@ -18,7 +18,7 @@ Sub-phase **B2**. From a human-confirmed fact sheet and an approved design bundl
 | HLD-P#7, #8 | Draft PR at B4 (`pr --stage design`); gate digests bound in the brief (§3.11.1); design artefacts checked against the gate-2 digest in every verify stage; required check on the head commit started by the `helix:reverify` label; evidence tied to tree and commit |
 | HLD-P#9 | Property-file layout, test file of fixture values, MARKER_LEFT scope, key-holder hand-off |
 | HLD-P#11, #15, #17, #18 | Client-org repositories; caps per phase attempt; typed outcomes and draft-only untested PRs; PR-side facts for 09's active and elapsed minutes |
-| HLD lower bullets | Several mutations picked by the Helix code; GitHub settings checked before each write; chain-head digest in the PR and ticket; Meridian surface in contract tests |
+| HLD lower bullets | Several mutations picked by the Helix code; GitHub settings checked before each write; chain-head digest in the PR and ticket; standalone validator contracts |
 | Review items 6 and 11 | Jira comments templated by code, no free estate text; DX MCP spike pass criteria and DX outputs as untrusted text |
 
 ## 3. Design
@@ -32,10 +32,11 @@ Sub-phase **B2**. From a human-confirmed fact sheet and an approved design bundl
 | `phases/verify.py` | Agent sandbox class, no agent session; uid `runner`, Maven as uid `maven` | `helix verify`: design-artefact check, pom guard, Maven, report verdict, key-list equality, static checks, mutation, secret scan | `[LLD]` |
 | `phases/b2/scaffold.py`, `phases/scaffold.py` | Agent sandbox; control plane on route `anypoint_cli_cp` (`helix scaffold`, §3.11) | `ScaffoldAdapter` with `DxMcpScaffold` and `CliScaffold` | `[PLAN]` routes, `[LLD]` adapter |
 | `phases/b2/pomguard.py` | Agent sandbox | Pom guard PG1-PG8 (§3.4.3); called by `verify` and by 04's `mcp__helix__maven` tool before each run | `[HLD-P#5]` |
-| `phases/b2/properties.py` | Agent sandbox, uid `runner` | Renders the global configuration file, the base file, the lowest environment's files and the test files; drives `prepare --write` for the higher environments | `[HLD-P#9]` `[PLAN]` prepare |
+| `phases/b2/properties.py` | Agent sandbox, uid `runner` | Renders all configuration and test files from the naming contract and approved key list | `[HLD-P#9]` |
+| `validation/{design_binding,pom_policy,reference_scan,property_policy,secret_policy,project_policy,report}.py` | Agent sandbox, no agent session | Standalone B2 validation subsystem: design integrity, Maven policy, reference scan, property and marker rules, plaintext-secret detection, generated-tree policy, and deterministic report | Standalone B2 validation decision |
 | `phases/b2/staticchecks.py` | Agent sandbox | SC1-SC8 (§3.6): property sources, global properties, literal config values, Java interop, marks, anchors, design artefacts, key list | `[LLD]` |
 | `phases/b2/mockguard.py`, `assertguard.py`, `mutation.py` | Agent sandbox | Static suite checks; mutation selection and runs | `[PLAN]` `[HLD-P lower]` |
-| `meridian_bridge/report.py`, `prepare.py`, `names.py`, `references.py` | Agent sandbox: `names` and `references` in the uid `runner` process; `report` and `prepare` as its child processes only (no credential) | Runs `meridian report` and `meridian prepare` as CLIs; renders the gate rulebook; wraps `naming.parse_any_name`, `grammar.Grammar.render`, `naming.config_file_path`, `config_files[0].render`; implements 06's `key_list_diff` over `references.scan_application` | `[PLAN]` CLIs, `[LLD]` wrapper |
+| `naming.py`, `validation/` | Agent sandbox, no agent session for validation | Compiles and checks naming-contract paths, scans source references, validates key-list equality, markers, plaintext-secret rules, POM policy, and forbidden generated paths without an external estate dependency | Standalone B2 validation decision |
 | `phases/pr.py`, `phases/b2/prbody.py` | Control plane | `helix pr` (stages `design` and `code`; modes `sync`, `stop`, `record-merge`): composes the git-writer functions of §3.11; PR body and Jira comment templates | `[PLAN]` |
 | `controlplane/gitwriter/` functions of §3.11 | Control plane | The contracts `helix pr` calls (`preflight`, `ensure_branch`, `push_tree`, `open_or_update_pr`, `mark_ready`, `set_labels`, `post_check`, `mark_superseded`) | `[LLD]` |
 | `controlplane/gitproof/` | Control plane | The bot-only-approval proof (§3.8.8); not part of the git writer | `[PLAN]` proof, `[LLD]` procedure |
@@ -62,8 +63,7 @@ Inside the sandbox there are three uids, named as in 04 §3.12, which owns the u
 | --- | --- | --- | --- | --- |
 | Confirmed fact sheet | `fact-sheet.confirmed.json`, `fact_sheet.v1`: a byte copy of the approved revision `fact-sheet.r{n}.json`, and the only file downstream agents read (05 §3.12). In the B2 pilot, before B3, the hand-confirmed file that 01 §3.9's `control-pre` accepted | Two staged inputs, `fact_sheet_typed` and `fact_sheet_text` (04 §3.4); every requester-derived free-text field is quoted data | Both entries carry `source_sha256` (the file's SHA-256) and `gate1_digest` (the live gate-1 approval's `decided_digest`), written by the activity as 06 §3.3 binds gate 1; S1 compares them (§3.11.1). No `status` check: the confirmed copy keeps the revision's bytes (05 open item 9) | `[PLAN]` file, `[HLD-P#3]` quoting, `[HLD-P#7]` digest |
 | Design bundle | `design_bundle.v1` (06), the revision gate 2 approved | `design_bundle_typed` and `design_text` (04 §3.4); the bundle file and its member files (contract, HLD, LLD) also staged runner-only under `/in/design/` for S3 and SC7 | `status` is `complete`; both bundle entries carry `source_sha256` (the bundle file's SHA-256) and `gate2_digest` (§3.11.1); B2 reads the fields in §3.10.4 | `[PLAN]` `[HLD-P#7]` |
-| Profile view | 02, 01 §3.5.2 sandbox profile view | Grammar, standards, `build.*` and `test.*` keys | Never `.env` or any secret reference | `[LLD]` |
-| Meridian files | Activity, from the profile and the run directory | Not handed to the agent: runner-only staging (§3.4.4, *Where Meridian runs*) | — | `[LLD]` |
+| Naming contract and standards bundle | Compiled profile contract and approved bundle, staged as immutable attempt inputs | Naming, environment paths, Maven baseline, logging, property and validator rules | Never `.env`, credentials, or mutable profile paths | Standalone B2 decisions |
 | Base tree | Control plane exports, as an archive, the head of `helix/{ticket_key}` when that branch exists (B4's design draft PR), else the default branch head | Repository files | `base_sha` recorded in `build_report.v1`. When the branch exists, its head must hold `docs/design/design-bundle.json` whose SHA-256 equals the gate-2 digest, else `FAILED`, `INPUT_DIGEST_MISMATCH` | `[HLD-P#7]` `[LLD]` |
 | Prior evidence | `/in/retry-findings.json` (04 §3.4), retries only | Failure codes, rule ids and `where`, and the last 200 log lines, as quoted data | Never the previous transcript | `[LLD]` |
 
@@ -85,7 +85,7 @@ sequenceDiagram
   B->>B: check input digests, gate-1 and gate-2 digests, one application
   B->>S: create project, first attempt only, if no pom.xml
   S-->>B: project tree
-  B->>B: place approved design files, normalise pom, render global config and property files, prepare --write
+  B->>B: place approved design files, normalise pom, render all configuration and property files from the approved contracts
   B->>A: query() with the allowlisted environment
   A->>M: goal clean_package
   M->>M: pom guard PG1-PG8

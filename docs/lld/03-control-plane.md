@@ -16,7 +16,7 @@ Other files own the rest:
 
 | File | Owns |
 | --- | --- |
-| 01 | `helix run`, the B2 pilot workflow, its jobs and runners, and the Meridian child environment (`meridian_bridge`, 01 §3.5.2) |
+| 01 | `helix run`, the B2 pilot workflow, its jobs and runners |
 | 02 | Profile schema (every key this file reads), the secret names it derives, and the doctor |
 | 04 | Phase envelope and runner |
 | 05 | Discover, intake and the ledger |
@@ -37,7 +37,7 @@ Other files own the rest:
 | Plan §4 decisions 1, 3, 10, 11 | Model route per client. Vault and connected app per client. Posts go only to the requester. Dollar caps | 3.7, 3.3, 3.5.5, 3.7.5 |
 | HLD-P#1, #2, #4, #5, #6 | Credential split and DX MCP bearer; model gateway; pilot isolation; Maven proxy; control-plane component and one vault | 3.6, 3.7, 3.2, 3.8, 3.1–3.3 |
 | HLD-P#7, #8, #10, #11, #12, #13, #14, #15, #16, #17, #18 | Approver ids and draft PR at B4; required check on the head commit; apps per activity; repositories and runners; state roles, the minimal service from B3 and off-path moves; tenancy; per-hop residency; per-call cap and intake rate limit; approvals only by transition; INCOMPLETE draft PR; elapsed vs active minutes | 3.4.5–3.4.6, 3.9, 3.6, 3.2, 3.10, 3.7.5, 3.4.12, 3.5.7 |
-| HLD lower bullets | Webhook hardening and the no-op rule; GitHub bot role and settings check; Jira `jira:` block; chain-head anchoring; Meridian surface | 3.4, 3.9.4, 3.11, 3.5.4, 3.6.4 |
+| HLD lower bullets | Webhook hardening and the no-op rule; GitHub bot role and settings check; Jira `jira:` block; chain-head anchoring; standalone adapter boundary | 3.4, 3.9.4, 3.11, 3.5.4, 3.6.4 |
 | Review item 6 `[LLD]` | Question sets can leak estate text to external or email requesters. Fix: a requester audience and policy, Draft for external audiences, and a deny-list scan on every outbound comment | 3.5.5 |
 
 ## 3. Design
@@ -60,8 +60,8 @@ Rules:
 
 1. No control-plane process runs an Agent SDK session or agent-written code. Agent-written Maven builds run only in sandboxes, or in file 07's no-agent `verify --stage head` container on the agent queue, which holds no secret beyond its Maven access (07 §3.2). The control plane only posts that container's verdict (3.9.3) `[PLAN]` `[HLD-P#4]`.
 2. From a sandbox, only two control-plane endpoints are reachable, both through the attempt's egress proxy (3.10): the gateway's `/v1/*`, and the Maven proxy's `/m2/*` through the proxy's relay (3.8). The broker is reachable only from the agent launcher, which runs outside the sandbox container (file 08; in B2, file 01's agent job) `[HLD-P#1]`.
-3. Shared services import only `meridian.clientdata` from Meridian, through `meridian_bridge`. It is pure functions with no import-time tenant state (`meridian/clientdata.py` docstring). Credentialed Meridian CLIs run as child processes per activity, so one client's Meridian settings never live in a process that serves another client. This is the plan's B5 trap, held structurally `[PLAN]` `[LLD]`.
-4. Shared services do not import `runlog.RunLog` themselves. `meridian/runlog.py` imports `meridian.settings` (for `RUN_LOG_DIR`) when it loads, and `settings.py` resolves the state directory and tenant profile from the environment at that moment. So shared services write store rows (`ticket_event`, `credential_lease`, `gateway_session`, `meter_event`), and the next control activity of that run chains them (09 §3.1; §6 item 16) `[LLD]`.
+3. Shared services are client-scoped through explicit request context and staged immutable inputs; they import no tenant-specific third-party runtime.
+4. Shared services write store rows (`ticket_event`, `credential_lease`, `gateway_session`, `meter_event`) and the audit subsystem records their deterministic summaries. No service binds process-wide client configuration at import time.
 
 ### 3.2 Deployment, runtimes by sub-phase, tenancy and availability
 

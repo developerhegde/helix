@@ -12,7 +12,7 @@ Not here: the webhook receiver, HMAC, dedup, the wake snapshot `ticket_snapshot.
 | --- | --- |
 | Plan §0, rule 2 | The intake agent holds no credential, is handed text and returns text; the control plane posts |
 | Plan §2 | B3 row: fact sheet, one question set per round, *Needs info*, a ledger; Copilot for Jira as comparator |
-| Plan §3.2 *Reads* | Discover's tools: Exchange search, `describe-connector`, Meridian `tenant discover/infer/validate` as CLIs |
+| Standalone B2 boundary | Discover uses explicit Exchange and connector adapters; any estate integration is optional and adapter-bound |
 | Plan §3.3 (all) | Reads, writes, exits, guards, traps of B3 |
 | Plan §3.4 *Reads*, *Writes* | The ledger handed to design (`ledger_snapshot.v1`); "a rejection's reason enters through the intake agent" (rejection mode, section 3.12a) |
 | Plan §4 decisions 6, 10 | Gate 1 signer; outbound messages and the Draft status |
@@ -26,7 +26,7 @@ Not here: the webhook receiver, HMAC, dedup, the wake snapshot `ticket_snapshot.
 | HLD-P#16 | No approvals by comment: Draft release (file 03) and gate 1 (file 08) are transitions checked by actor id |
 | HLD-P#17 | Every CLI here returns a `PhaseOutcome` (spine §5) |
 | HLD-P#18 | Gate 1's elapsed wait is file 08's `elapsed_wait_s`; active minutes come from the reviewer's Jira field and are recorded by file 09, separately |
-| HLD lower bullets | Chain-head digest in the gate-1 comments (24); actor allowlist and no-op events (26); `jira:` onboarding and the state map (27); Meridian output redaction before any model (19); mapping rules feed file 07's mutation picking by the Helix code, not the test agent (the single-mutation item) |
+| HLD lower bullets | Chain-head digest in the gate-1 comments (24); actor allowlist and no-op events (26); `jira:` onboarding and the state map (27); adapter output redaction before any model (19); mapping rules feed file 07's mutation picking by the Helix code, not the test agent (the single-mutation item) |
 | Review item 6 | Questions templated by fact id; the reporter audience that file 03 sets once per ticket and this file only reads (section 3.5); Discover's estate tokens added to file 03's outbound scan; an `external` audience's question sets held as Draft by file 03 |
 | Review item 11 | DX MCP route for Discover only under the widened spike criteria; its output is untrusted text |
 
@@ -38,7 +38,7 @@ Not here: the webhook receiver, HMAC, dedup, the wake snapshot `ticket_snapshot.
 | --- | --- | --- |
 | `phases/discover/__init__.py` | Control plane | `helix discover`: runs the sources, applies the redaction allowlist and the profile's `redact_before_model` rules, writes `discover_findings.v1`, renders `discover.txt`, writes the estate deny-list |
 | `phases/discover/exchange.py` | Control plane | `ExchangeSearch` and `ConnectorDescriber` interfaces and their adapters (DX MCP, Anypoint CLI, API) |
-| `meridian_bridge/tenant_cli.py` | Control plane | Runs `meridian tenant discover/validate/infer --json` as subprocesses of the pinned wheel; strips `tenant discover`'s one-line preamble and parses the JSON object (section 3.4) |
+| `phases/discover/estate_adapter.py` | Control plane | Optional, version-pinned estate adapter behind an explicit contract; absent adapters return structured `not_configured` results and never block core intake |
 | `phases/intake/prepare.py` | Control plane | `helix intake-prepare`: classifies the wake, reads the receiver's `ticket_snapshot.v1` (no Jira call), snapshots the ledger, writes `intake-context.json`, `ticket-text.json`, `ledger-snapshot.json` and `catalogue.json` |
 | `phases/intake/catalogue.py` | Control plane | The built-in fact catalogue plus `intake.facts_extra`, written as `fact_catalogue.v1` (section 3.7) |
 | `phases/intake/agent.py` | Agent sandbox | `helix intake`: one session through file 04's runner; supplies only the kind-`intake` output handling and handler check 5 (section 3.6) |
@@ -73,7 +73,7 @@ The same app also runs `meridian tenant discover`, which reads the account and o
 | If more than Exchange read is needed | An owner decision against HLD-P#10's read-only intent: grant the read privilege to the Discover app, or keep `tenant_discover` out of `discover.required_sources` until it is granted (open item 12) |
 | Never | A write, deploy or production-environment privilege on this app; ONB-18's negative probes stay as file 02 defines them |
 
-**Meridian state directory.** Spine §7 governs: every Meridian subprocess gets `MERIDIAN_HOME=$HELIX_STATE_ROOT/{client_id}/meridian/`, the only name Meridian reads (`meridian/settings.py:74`, `_state_dir()`).
+**Optional estate adapters.** Discover's core contract is independent of estate tooling. An optional adapter receives staged, non-secret request data and returns a versioned response; it never supplies profile, naming, configuration-path, or validation semantics.
 
 ### 3.3 CLI interfaces
 

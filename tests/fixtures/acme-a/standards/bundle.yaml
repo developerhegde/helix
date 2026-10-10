@@ -1,0 +1,30 @@
+schema: client_standards_bundle.v1
+client_id: acme-a
+version: 1.0.0
+approved:
+  by: acme-architect@example.invalid
+  at: 2026-10-09T10:00:00Z
+project:
+  mule_runtime: 4.9.1
+  java: 17
+  golden_parent:
+    group_id: example
+    artifact_id: acme-mule-parent
+    version: 1.0.0
+  allowed_plugins:
+    - org.mule.tools.maven:mule-maven-plugin
+  forbidden_paths:
+    - .github/**
+    - .mvn/**
+    - mvnw*
+logging:
+  style: json_logger_module
+  module: acme-json-logger
+  required_fields:
+    - timestamp
+    - level
+    - appName
+    - env
+    - correlationId
+    - flowName
+    - message

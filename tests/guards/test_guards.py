@@ -6,6 +6,8 @@ import sys
 import tempfile
 import unittest
 
+import yaml
+
 from helix import product_identity as pid
 from helix.profile.doctor import REQUIRED_FILES
 from tests.support import make_profile, run_cli
@@ -37,7 +39,10 @@ class OfflineGuard(unittest.TestCase):
             self.assertEqual([e for e in events if e[0] != "open"], [])  # no socket, no subprocess
             opened = {os.path.realpath(p) for e, p in events if isinstance(p, str)}
             allowed = {os.path.realpath(os.path.join(root, n)) for n in REQUIRED_FILES}
-            self.assertEqual(opened, allowed)  # exactly the profile files: no vault store, no other file
+            with open(os.path.join(root, pid.PROFILE_FILENAME)) as handle:
+                reference = yaml.safe_load(handle)["standards"]
+            allowed.add(os.path.realpath(os.path.join(root, reference["path"])))
+            self.assertEqual(opened, allowed)  # exactly the approved profile inputs: no vault store or other file
             self.assertNotIn("ACME_SENTINEL_VAR", os.environ)
 
 

@@ -24,7 +24,7 @@ This file designs how Helix runs an agent: the session runner (one Agent SDK `qu
 | HLD-P#16 | No mid-phase approvals: any ask is a logged deny that stops the phase |
 | HLD-P#17 | Session ends map to `PhaseOutcome` values |
 | HLD lower bullet, mutation | The test agent never picks the mutation `[HLD-P lower]` |
-| HLD lower bullet, Meridian surface | The naming tools' use of `Grammar.parse` and the staged naming profile are in decision 5's contract test `[HLD-P lower]` |
+| HLD lower bullet, naming integrity | Naming tools use the staged immutable `naming_contract.v1` and independently render and parse names |
 | Review item 6 | Untrusted text leaves an agent in outward-posted fields only as `quoted` entries, enforced by submission check 6; agent findings reach a ticket by code only `[LLD]` |
 | Review item 11 | DX MCP tool allowlist and full tool list built from the spike record; hiding non-allowlisted tools and bearer auth as spike pass criteria; DX outputs in the injection corpus `[LLD]` |
 
@@ -46,7 +46,7 @@ This file designs how Helix runs an agent: the session runner (one Agent SDK `qu
 | `clishim.py` | Entry point of the `cli_path` wrapper `/opt/helix/bin/claude-agent` (3.12): compares the CLI's environment keys with the expected set, writes the snapshot, drops to uid `agent` or exits 97 | `[LLD]` |
 | `definitions/{intake,design,build,test}/` | `definition.yaml` (`agent_definition.v1`), `system.md`, `skills.yaml` | spine §3 |
 
-Only `toolserver.py` reaches Meridian, and only through `meridian_bridge` (spine §2) for the naming tools. The bridge binds the staged naming profile at preflight (3.9.2).
+`toolserver.py` uses the pure `helix.naming` contract for naming tools. The contract is compiled before the agent starts and staged as immutable input; no naming tool reads a profile directory, environment variable, network service, or optional adapter.
 
 ### 3.2 Interfaces
 
@@ -77,12 +77,12 @@ sequenceDiagram
   participant K as Claude Code CLI (uid agent)
   participant P as Hooks and helix MCP (in runner)
   participant G as Model gateway (file 03)
-  A->>A: stage /in (brief, naming profile, raw untrusted inputs, retry findings) and /work/{id}/inputs (trusted inputs), per the staging map in 3.4
+  A->>A: stage /in (brief, naming contract, raw untrusted inputs, retry findings) and /work/{id}/inputs (trusted inputs), per the staging map in 3.4
   A->>A: obtain gateway session token, then env = agent_env(phase, mode, staged)
   A->>C: start container: that env only, mounts per 3.12
   C->>R: init removes RUNTIME_ADDED names, checks env, drops to uid runner, cwd /in
   R->>R: preflight: assert_process_env, input digests at sandbox_path, skills digests, Maven settings check (build, test)
-  R->>R: preflight: no Meridian state under HOME, import meridian, check naming profile source (3.9.2)
+  R->>R: preflight: validate the staged naming-contract digest and immutable contract shape
   R->>R: preflight: render_views() writes inputs/{name}.view.md via untrusted.wrap()
   R->>R: build_options() checks env equals agent_env's map
   R->>K: query(streamed first user message, options), then the cli_path wrapper compares env keys, writes the snapshot, and drops to uid agent, or exits 97 on a mismatch
@@ -219,7 +219,7 @@ Digests are shortened in examples. The build brief carries no Discover input: co
 | Delimited view of each untrusted file input | Runner at preflight, `render_views()` | `/work/{id}/inputs/{name}.view.md` | Yes; long views are paged by `read_input` (3.9.1) |
 | Input with `inline: true` | Activity, as for its trust | As above | Rendered by the runner into the first user message (3.8) |
 | Paged view of an untrusted inline input whose delimited text exceeds the block limit (rule 3 of 3.11) | Runner at preflight, `render_views()` | `/work/{id}/inputs/{name}.view.md` | Yes, through `read_input` only; the brief block carries the first page and a marker naming the input and its page count |
-| Naming profile (`naming_profile`, `agent_visible: false`): the `schema_version`, `naming`, `environments`, `config_dir_in_repo` and `config_files` sections of the client's `tenant.yaml`, nothing else (3.9.2 step 2) | Activity | `/in/config/tenant.yaml` | No; read only by `meridian_bridge` (3.9.2); never listed by `list_inputs` or in block 3. Design, build and test |
+| Naming contract (`naming_contract`, `agent_visible: false`): canonical `naming_contract.v1` JSON and its SHA-256 digest | Activity | `/in/naming-contract.json` | No; read only by `helix.naming`; never listed by `list_inputs` or in block 3. Design, build and test |
 | Other runner-only inputs a phase module names (`agent_visible: false`), for example file 06's `estate_names`, and file 07's design-file copies for S3 and SC7 and its Meridian files for its `report` and `prepare` children | Activity | Under `/in/`, for example `/in/estate-names.json`, `/in/design/` and `/in/meridian/` | No; read only by the phase module or its child processes (3.9.2 step 6) |
 | Previous attempt's findings | Activity, from `retry.findings_path` | `/in/retry-findings.json` | No; the runner renders the retry context from it (3.8) |
 

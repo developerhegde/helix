@@ -2,14 +2,14 @@
 
 ## 1. Purpose and scope
 
-This file designs the per-client profile and `helix doctor`, the first object of sub-phase **B1** `[PLAN]`. The profile is one directory per client: Meridian's four files exactly as `meridian init` writes them, plus `helix.yaml` (`helix_profile.v1`). The loader refuses a profile that is not whole and names the missing field. The doctor runs a numbered catalogue of onboarding checks (`ONB-01` … `ONB-38`), offline and by read-only REST calls, and its numbers are the item numbers of Helix's `docs/ONBOARDING.md`. Nothing here writes to Anypoint, Jira or GitHub. The one Helix write to the profile is the gate-3 append of deployment-property keys (section 3.10). Names, enums, exit codes, storage paths and the credential model come from `00-conventions.md` and are not redefined.
+This file designs the per-client `helix.yaml` profile and `helix doctor`, the first object of sub-phase **B1**. The profile is one directory per client, has no required companion product files, and holds only non-secret configuration plus references to approved standards material. The loader refuses an incomplete profile and names the invalid field. The doctor runs offline structural and policy checks; connected-service checks are explicitly deferred. B1 never writes Anypoint, Jira, GitHub, or the profile. Names, enums, exit codes, storage paths and the credential model come from `00-conventions.md` and are not redefined.
 
 ## 2. Traceability
 
 | Source | What this file implements |
 | --- | --- |
 | Plan §1 (week zero) | Admin answers dated asked and answered; the account team's answers on `license.lic` (ONB-20) and on Einstein-backed generation's cost (ONB-37) |
-| Plan §3.1 (B1) | Profile directory, `helix.yaml` contents, loader refusals, `helix doctor`, connected apps with permissions, environments and expiry, `license.lic`, Meridian exports per workflow (built by 01's bridge) |
+| Standalone B1 contract | Profile directory, `helix.yaml` contents, loader refusals, offline `helix doctor`, approved standards reference, and naming contract validation |
 | Plan §3.2 | `deployment_properties:` handling (section 3.10, a timing deviation awaiting the owner); bot-only approval shown blocked, approve-and-run setting, `allowed_bots` (ONB-29 to ONB-31) |
 | Plan §3.3, §3.5 traps | Jira points budget; `MERIDIAN_AUTH_MODE=connected_app`; fresh process per workflow; Fable 5.1 under zero-data-retention; EU only through Bedrock or Vertex; doctor refuses a forbidden route |
 | Plan §4 decisions 1, 3, 6, 7, 10, 11 | Model route; one profile per client; gate owners; design standards; Draft status; caps |
@@ -35,7 +35,7 @@ This file designs the per-client profile and `helix doctor`, the first object of
 | `profile/deployment_keys.py` | `append(profile_dir, keys, *, run_id) -> AppendResult`: the gate-3 write of section 3.10 | `[LLD]` |
 | `cli/profile.py`, `cli/doctor.py` | `helix profile validate`, `helix doctor` (conventions §4) | `[PLAN]` CLI parity |
 
-The doctor reaches Meridian only through `meridian_bridge` (conventions §3; functions of 01 §3.5.4), the vault only through the vault adapter's `ClientVault.metadata(name)` (03 §3.3, metadata only), Anypoint only through the credential broker's doctor probe, the model route only through the gateway's doctor probe, Nexus only through the Maven proxy (a `HEAD` authenticated by the doctor's mTLS certificate, 03 §3.8), GitHub only through 03's git-writer client, and Temporal only through file 08's client. Section 3.11 lists the interfaces the doctor relies on in other files, and says which are not yet defined there. The doctor runs in the control plane (conventions §4), because the broker hands it a connected-app pair for `tenant discover`.
+The implemented B1 doctor is offline and read-only: it reads only `helix.yaml`, validates the policy, secret tripwire, non-production scope, and standalone naming contract, and reports deferred checks. Later connected-service checks must use explicit adapters and do not alter this offline boundary. The doctor never imports Meridian, reads a vault, loads `.env`, or makes a network call.
 
 ### 3.2 The profile directory `[PLAN]` layout, `[LLD]` additions
 
@@ -247,7 +247,7 @@ There is no separate settings-reader credential: the settings check uses the git
 | `design_standards.ruleset` | `{group_id: string, asset_id: string, version: ^\d+\.\d+\.\d+$}`: the Exchange coordinates of the ruleset; the Best Practices ruleset's group id and asset id are `[VERIFY]` | yes | 33 | `[PLAN-DEFAULT 7]` |
 | `design_standards.max_ruleset_violations` | const `0` | yes | 33 | `[PLAN-DEFAULT 7]` |
 | `design_standards.layers_policy` | enum `fewest_with_reuse`, `api_led_three_layer` | yes | 33 | `[PLAN-DEFAULT 7]` |
-| `design_standards.logging` | enum `core_logger_mdc` | yes | 33 | `[PLAN-DEFAULT 7]` |
+| `design_standards.logging` | enum `json_logger_module` | yes | 33 | Client standards bundle decision; requires the approved Exchange logger module |
 | `design_standards.skills_file`, `.decision_table` | relative paths inside the profile directory | yes | 33 | `[PLAN-DEFAULT 7]`, `[LLD]` location |
 
 **`orchestration`** — names and defaults are file 08's (08 §3.17); ONB-38
@@ -446,7 +446,7 @@ design_standards:                      # decision 7 default (ONB-33)
   ruleset: {group_id: "00000000-0000-0000-0000-000000000000", asset_id: "acme-fixture-best-practices", version: "1.6.5"}   # fixture placeholders; real group id and asset id [VERIFY]; 1.6.5 at research time
   max_ruleset_violations: 0
   layers_policy: fewest_with_reuse
-  logging: core_logger_mdc
+  logging: json_logger_module
   skills_file: standards/skills.md
   decision_table: standards/decision-table.json
 

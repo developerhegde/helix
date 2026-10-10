@@ -26,7 +26,7 @@ Implements [`b1-client-profile-and-doctor.md`](b1-client-profile-and-doctor.md).
 
 ## Decisions and resolved ambiguities
 
-0. **Helix is standalone** (owner decision, 2026-10-09). It imports, reads, and validates nothing of Meridian's. The profile is `helix.yaml` only, B1-015 is withdrawn, and a guard test refuses any `meridian` reference in `src/` or `pyproject.toml`.
+0. **Helix is standalone with a future Meridian integration seam** (owner decision, 2026-10-09). B1 imports, reads, and validates nothing of Meridian's. The profile is `helix.yaml` only, B1-015 is withdrawn, and a guard test refuses any `meridian` reference in `src/` or `pyproject.toml`. A later integration must be introduced through an explicit adapter contract and profile capability, with version-pinned dependency and contract tests; it must not be added as an implicit runtime dependency.
 1. **Exit codes with warnings.** The contract's exit table lists "warnings only without `--strict`" under exit 1, but exit 0 and the `--strict` description say warnings fail only under `--strict`. Implemented: errors → 1; warnings only → 0, or 1 with `--strict`.
 2. **Profile path.** `--profile` wins; `HELIX_CLIENT_PROFILE` is the only fallback. Both must be absolute. Nothing else is searched.
 3. **Status values.** `healthy`, `warning`, `error`. JSON adds `deferred_checks` (additive), so automation can see that connected-system checks were not simulated.

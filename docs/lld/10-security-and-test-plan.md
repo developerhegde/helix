@@ -16,9 +16,9 @@ Names, enums, outcomes, paths and the credential model are in `00-conventions.md
 | Plan §7 | Definition of done, items 1–7 | §5.10 |
 | HLD | *Trust boundaries and security*; *Runtime* rows *Tenant isolation* and *Residency* | §3.2–§3.5, §3.9 |
 | HLD gaps | HLD-P#1 to HLD-P#19, each with at least one guard | §5.7 |
-| HLD lower bullets | Chain anchoring, GitHub settings, webhook hardening, Jira onboarding, mutation choice, Meridian surface, hosted-agent revisit | §5.8, §6 |
+| HLD lower bullets | Chain anchoring, GitHub settings, webhook hardening, Jira onboarding, mutation choice, standalone-contract coverage, hosted-agent revisit | §5.8, §6 |
 | Review items (not in the HLD table), tagged `[LLD]` | 6: question sets can leak estate text to email or external requesters. 11: DX MCP spike pass criteria are too narrow | §3.6, §5.8 |
-| Meridian source | `clientdata.py`, `analyze.py`, `markers.py`, `runlog.py`, `db/audit.py`, `db/repositories/actions.py`, `settings.py`, `tenant.py`, `examples/tenant.example.yaml`, `platform/authn/__init__.py`, `platform/authn/browser_sso.py`, `platform/authn/masking.py`, `platform/guards.py`, `naming.py`, `grammar.py`, `cli.py`, `secure.py` | cited inline |
+| Optional adapter surface | Any future estate adapter declares its own version-pinned contract, capabilities, input/output schemas, and isolation tests; core controls do not import it | cited only in its adapter design |
 
 ## 3. Design
 

@@ -49,7 +49,7 @@ class DoctorTest(unittest.TestCase):
     def test_each_section_omitted(self):
         expected = {"schema_version": "B1-002", "client_id": "B1-003", "model_route": "B1-004",
                     "data_handling": "B1-005", "jira": "B1-007", "github": "B1-008", "vault": "B1-009",
-                    "anypoint": "B1-010", "design": "B1-013", "gates": "B1-013"}
+                    "anypoint": "B1-010", "design": "B1-013", "gates": "B1-013", "naming": "B1-015", "standards": "B1-016"}
         for section, rule in expected.items():
             with self.subTest(section):
                 root = self.profile(lambda d: d.pop(section))
@@ -108,6 +108,18 @@ class DoctorTest(unittest.TestCase):
             with self.subTest(bot):
                 root = self.profile(lambda d: d["github"]["allowed_bots"].remove(bot))
                 self.assertEqual(self.paths(root, "B1-008"), ["github.allowed_bots"])
+
+    def test_invalid_naming_contract(self):
+        root = self.profile(lambda d: d["naming"]["environments"].pop(1))
+        self.assertEqual(self.paths(root, "B1-015"), ["naming"])
+        with self.assertRaises(ProfileInvalid):
+            load_profile(root, now=NOW)
+
+    def test_standards_bundle_must_match_approved_reference(self):
+        root = self.profile(lambda d: d["standards"].update(sha256="0" * 64))
+        self.assertEqual(self.paths(root, "B1-016"), ["standards"])
+        with self.assertRaises(ProfileInvalid):
+            load_profile(root, now=NOW)
 
     # 9
     def test_invalid_caps(self):

@@ -2,9 +2,9 @@
 
 ## 1. Purpose and scope
 
-This file is the foundation every other LLD file builds on. It covers Helix's own repository: its layout, packaging and pins; how a process gets its configuration and binds to one client; the three container images; the B2 pilot as a GitHub Action; `helix run`, the runner that keeps a terminal, the Action and Temporal in parity; `meridian_bridge`, the only code that touches Meridian, with the contract tests that hold it to the pinned version; Helix's own CI policy; and the documents. The repository scaffold, packaging, configuration, bridge and contract suite land in **B1**. The images, the pilot workflow and `helix run` land in **B2**. The worker images are reused unchanged by **B5**. Nothing here is specific to **B6**, but nothing forecloses it.
+This file is the foundation every other LLD file builds on. It covers Helix's repository layout, packaging, runtime configuration, container images, the B2 pilot as a GitHub Action, and `helix run`, which keeps terminal, Action, and Temporal execution in parity. The repository scaffold and offline profile validation land in **B1**. The images, pilot workflow, naming contract, and local validation entry points land in **B2**. The worker images are reused unchanged by **B5**. Nothing here is specific to **B6**, but nothing forecloses it.
 
-Names, enums, the CLI surface, `PhaseOutcome`, storage paths, schema owners, process classes, credentials and the sandbox environment allowlist are defined in `00-conventions.md`, and this file only references them. Meridian source citations are `path:line` in the Meridian tree at v1.8.1 (`meridian/__init__.py:15`).
+Names, enums, the CLI surface, `PhaseOutcome`, storage paths, schema owners, process classes, credentials and the sandbox environment allowlist are defined in `00-conventions.md`. B1–B5 have no Meridian runtime dependency; a future optional adapter is governed by the standalone boundary in the architecture decisions.
 
 ## 2. Traceability
 
