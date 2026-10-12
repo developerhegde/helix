@@ -93,6 +93,52 @@ Two values are the client's to own. `project.golden_parent` names the client's o
 
 The schema remains deliberately narrow in its first iteration. Unknown prose must not be treated as executable policy.
 
+## Additions accepted on 2026-10-12
+
+`standards-bundle-mapping.md` classifies all 94 rules of `docs/mulesoft-development-standards.md`. To carry them, the bundle needs the fields below. They are additive, so the format stays `client_standards_bundle.v1`. The loader does not read them yet.
+
+```yaml
+project:
+  mule_files: {global: global.xml, error_handler: error-handler.xml, router: "{name}-api.xml", implementation: "{resource}-impl.xml"}
+  child_pom: {forbid_versions: true, forbid_profiles: true, forbid_final_name: true, forbid_version_ranges: true}
+api:
+  contract_source: repository            # or exchange_dependency (mapping decision D2)
+  base_path: /api/v{major}
+patterns:                                # anchored regular expressions, checked by the validator
+  implementation_flow: "[a-z]+(-[a-z0-9]+)+-flow"
+  sub_flow: "[a-z]+(-[a-z0-9]+)+-subflow"
+  connector_config: "[a-z0-9]+(-[a-z0-9]+)+-config"
+  property_key: "[a-z][a-z0-9]*(\\.[a-z][a-z0-9-]*)+"
+  flow_variable: "[a-z][A-Za-z0-9]*"
+  error_type: "APP:[A-Z][A-Z0-9_]*"
+  object_store: "[a-z0-9]+(-[a-z0-9]+)*-os"
+connectors:
+  allowed: [http, db, salesforce, sftp, file, anypoint-mq, jms, vm, objectstore, email, wsc, validation, secure-properties]
+configuration:
+  layout: deployment_properties          # or environment_files (mapping decision D1)
+  same_keys_every_environment: true
+error_handling:
+  handler_file: error-handler.xml
+  mappings:
+    - {types: ["APIKIT:BAD_REQUEST", "APP:VALIDATION"], status: 400, code: VALIDATION_FAILED}
+    - {types: ["APIKIT:NOT_FOUND", "APP:*_NOT_FOUND"], status: 404, code: NOT_FOUND}
+    - {types: [ANY], status: 500, code: INTERNAL_ERROR}       # the full table has eleven rows
+testing:
+  minimum_application_coverage: 75
+  minimum_resource_coverage: 50
+  minimum_flow_coverage: 50
+review:
+  branch_pattern: "feature/{ticket}-{slug}"
+  commit_pattern: "{ticket}: {summary}"
+  approvals: 1
+  hotfix_approvals: 2
+rules:                                   # the registry: one entry per approved rule
+  - {id: STD-POM-01, strength: blocking, form: validation, checked_by: helix, check: POM_PARENT_MISMATCH}
+  - {id: STD-LOG-03, strength: blocking, form: checklist, checked_by: reviewer}
+```
+
+A rule with `checked_by: reviewer` appears in the pull request as a checklist line; Helix never marks it passed. A rule with `checked_by: helix` names the validator code that fails when it is broken, so a rule without a built check is visible as such.
+
 ## Converting prose into usable standards
 
 The standards owner classifies each normative statement from the source documentation into one of these forms:

@@ -453,7 +453,7 @@ Putting block 3 in the user message keeps everything that changes per attempt, a
 | Tool | intake | design | build | test | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `Read`, `Glob`, `Grep` | Yes | Yes | Yes | Yes | Read scope, table 3.10b |
-| `Write`, `Edit` | No | `design/**` | `repo/**` except `repo/src/test/**`, `repo/.mvn/**`, `repo/mvnw*`, `repo/.github/**`, `repo/mule-artifact.json`, `repo/docs/design/**`, `repo/src/main/resources/api/**` (the approved contract), `repo/src/main/mule/global-config.xml`, every `*.yaml`, `*.yml` and `*.properties` under `repo/src/main/resources/` (the property files file 07 renders, 07 §3.4.4), `repo/src/main/java/**`, `**/settings*.xml`, `**/toolchains.xml` | `repo/src/test/munit/**`, `repo/src/test/resources/expected/**`, `repo/src/test/resources/payloads/**`; never `repo/pom.xml` | Write scope (R-PATH-01). The build agent never writes tests `[PLAN]`. The rest is `[LLD]`, aligned with file 07's denials (07 §3.4.6) and its checks that the design artefacts keep their digests (SC7) and that the test phase leaves the pom and `src/main/` digests unchanged |
+| `Write`, `Edit` | No | `design/**` | `repo/**` except `repo/src/test/**`, `repo/.mvn/**`, `repo/mvnw*`, `repo/.github/**`, `repo/mule-artifact.json`, `repo/docs/design/**`, `repo/src/main/resources/api/**` (the approved contract), `repo/src/main/mule/global.xml`, every `*.yaml`, `*.yml` and `*.properties` under `repo/src/main/resources/` (the property files file 07 renders, 07 §3.4.4), `repo/src/main/java/**`, `**/settings*.xml`, `**/toolchains.xml` | `repo/src/test/munit/**`, `repo/src/test/resources/expected/**`, `repo/src/test/resources/payloads/**`; never `repo/pom.xml` | Write scope (R-PATH-01). The build agent never writes tests `[PLAN]`. The rest is `[LLD]`, aligned with file 07's denials (07 §3.4.6) and its checks that the design artefacts keep their digests (SC7) and that the test phase leaves the pom and `src/main/` digests unchanged |
 | `Bash` | No | No | Allowlisted utilities | Allowlisted utilities | `R-CMD-*`, bashparse (3.10c); foreground only |
 | `TodoWrite` | Yes | Yes | Yes | Yes | Harmless planning aid |
 | `mcp__helix__submit_result` | Yes | Yes | Yes | Yes | 3.6 |
@@ -764,7 +764,7 @@ allowed_tools: [Read, Write, Edit, Glob, Grep, Bash, TodoWrite,
 read_scope: [inputs, "repo/**", "!repo/docs/design/**", "/opt/helix/skills/build/**", "/opt/helix/skills/shared/**"]
 write_scope: ["repo/**", "!repo/src/test/**", "!repo/.mvn/**", "!repo/mvnw*", "!repo/.github/**",
   "!repo/mule-artifact.json", "!repo/docs/design/**", "!repo/src/main/resources/api/**",
-  "!repo/src/main/mule/global-config.xml", "!repo/src/main/resources/**/*.yaml",
+  "!repo/src/main/mule/global.xml", "!repo/src/main/resources/**/*.yaml",
   "!repo/src/main/resources/**/*.yml", "!repo/src/main/resources/**/*.properties",
   "!repo/src/main/java/**", "!**/settings*.xml", "!**/toolchains.xml"]
 bash_commands:

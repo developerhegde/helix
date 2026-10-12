@@ -143,7 +143,7 @@ The workflow does not branch on exit codes; each phase CLI also writes a `PhaseO
 | `phase` | `discover`, `intake`, `design`, `build`, `test`, `pr`; `deploy` reserved for B6 | `[LLD]` |
 | `gate` | `gate1_requirement`, `gate2_design`, `gate3_merge`, `gate4_deploy` (B6) | `[PLAN]` names, `[LLD]` keys |
 | Logical ticket state | `new`, `needs_info`, `requirement_review`, `design_review`, `building`, `in_review`, `done`, `cancelled`, optional `draft`; `keys_filled`, `deploy_review`, `deployed` reserved for B6 (file 11) | `needs_info`, `requirement_review`, `design_review`, `draft`: `[PLAN]`; others `[LLD]` |
-| Branch | `helix/{ticket_key}` in the generated-app repository | `[LLD]` |
+| Branch | The standards bundle's `review.branch_pattern`, for example `feature/{ticket_key}-{slug}`, in the generated-app repository. Files 01, 02, 03, 06 and 07 still assume the earlier fixed name and are to be revised | Standards mapping decision D4 |
 | Fact status | `known`, `assumed`, `missing`, `changed` | `[PLAN]` |
 | Fact id | `source`, `target`, `trigger`, `volume`, `sla`, `error_handling`, `security`, `mapping`, `environments` (extensible per profile) | `[PLAN]` |
 

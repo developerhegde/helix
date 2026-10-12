@@ -114,6 +114,10 @@ The example is illustrative. A client may use a different grammar, provided it s
 6. A normal and secure environment template must render different paths for every environment.
 7. No generated configuration path may equal the API contract path, a design-document path, a Maven wrapper path, or a CI/workflow path.
 
+### Layout
+
+The `configuration` block above describes the `environment_files` layout. The standards bundle's `configuration.layout` may instead be `deployment_properties` (standards mapping decision D1), where the application holds only a base file and one secure file and the pipeline supplies each environment's values. The fields for that layout are not yet defined in this contract.
+
 ## Helix-owned interface
 
 `helix.naming` is a pure library with no network, filesystem, model, or environment-variable dependency.
