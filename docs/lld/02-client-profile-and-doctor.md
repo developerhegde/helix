@@ -17,7 +17,7 @@ This file designs the per-client `helix.yaml` profile and `helix doctor`, the fi
 | Plan §3.7, §7 items 1 and 6 | Doctor cites `ONBOARDING.md` by number, a test holds them in step; admin items dated asked and answered |
 | HLD *Components* row "Client profile and `helix doctor`" | Whole module |
 | HLD gaps | #1 spike passes only with bearer auth (`toolchain.dx_mcp_spike`); #2 model route credential; #5 EE Nexus via proxy; #6 one vault; #7 approver lists and separation of duties; #8 required checks; #10 one connected app per Anypoint-using activity, checked as distinct apps; #11 generated-app repositories; #13 per-client scope and Temporal namespace; #14 residency hops; #15 caps, monthly ceiling, rate limit, kill switch; #16 approvals only as gate transitions (`jira.gates`); #17 preflight outcomes; #18 per-gate active and elapsed minutes fields |
-| HLD *Lower severity* | Jira onboarding block (`[HLD-P lower: Jira]`); GitHub settings and bot role, read with an installation token narrowed to read permissions (`[HLD-P lower: GitHub]`, review item 25); per-client webhook secret (`[HLD-P lower: webhook]`); Meridian dependency surface (`[HLD-P lower: Meridian]`) |
+| HLD *Lower severity* | Jira onboarding block (`[HLD-P lower: Jira]`); GitHub settings and bot role, read with an installation token narrowed to read permissions (`[HLD-P lower: GitHub]`, review item 25); per-client webhook secret (`[HLD-P lower: webhook]`); standalone adapter boundary |
 | Review items not in the HLD table | Item 6: requester policy, Draft for email-originated requesters, deny-list on outbound comments (`[LLD]`, review item 6). Item 11: the DX MCP spike's evidence (`[LLD]`, review item 11) |
 
 ## 3. Design

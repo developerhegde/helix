@@ -1,0 +1,2 @@
+orders.host: ${SET_DEV}
+orders.password: ${ENCRYPT_DEV}

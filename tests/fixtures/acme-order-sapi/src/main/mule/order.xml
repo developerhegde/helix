@@ -1,0 +1,8 @@
+<mule xmlns="http://www.mulesoft.org/schema/mule/core">
+  <flow name="get-orders-flow">
+    <set-payload value="${orders.base}" />
+    <set-variable variableName="host" value="${orders.host}" />
+    <set-variable variableName="password" value="${secure::orders.password}" />
+    <set-variable variableName="environment" value="${env}" />
+  </flow>
+</mule>

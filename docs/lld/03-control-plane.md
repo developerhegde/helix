@@ -140,7 +140,7 @@ flowchart LR
 | Gateway `/v1/messages`, `/v1/messages/count_tokens`, `/v1/helix/session` | Internal; reached only through an attempt's egress proxy | The sandbox | Gateway session token (3.7.2) | `[HLD-P#2]` |
 | Maven proxy `GET` and `HEAD /m2/{client_id}/…` | Internal; reached only through the egress proxy's Maven relay | The relay; `HEAD` also from the doctor (3.8) | Per-attempt Maven access token, or mTLS for the doctor's `HEAD` (3.8) | `[HLD-P#5]` |
 | Vault login and each role's KV paths | Internal | Control-plane services; in B2, file 01's control jobs | Workload identity. In B2, GitHub OIDC JWT auth bound to the pilot repository and the `helix-{client_id}` environment `[VERIFY]` | `[HLD-P#6]` |
-| Agent-job API; broker `/v1/meridian-env`, `/v1/bearer` and `/v1/doctor/anypoint`; gateway `/internal/*`; PostgreSQL; Temporal | Internal | Control-plane callers and agent launchers | mTLS | `[LLD]` |
+| Agent-job API; broker `/v1/bearer` and `/v1/doctor/anypoint`; gateway `/internal/*`; PostgreSQL; Temporal | Internal | Control-plane callers and agent launchers | mTLS | `[LLD]` |
 
 **If the owner picks GitHub-hosted runners** (§6 item 12), the launcher and the sandbox run on GitHub's VMs. Then these paths must also face the internet, each with the authentication above: the broker's attempt, lease, redeem, revoke and pre-digest paths; the vault login and the `control` role's KV paths; the gateway's three `/v1/` paths; and the Maven proxy's `/m2/` path. Everything in the last row stays internal, and the egress proxy runs on the runner VM, outside any network the owner controls `[LLD]`.
 

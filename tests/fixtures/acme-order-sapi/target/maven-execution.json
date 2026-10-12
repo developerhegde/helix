@@ -1,0 +1,1 @@
+{"command":["mvn","--batch-mode","--no-transfer-progress","--settings","<settings>","clean","test"],"duration_ms":1000,"exit_code":0,"schema":"mule_execution_receipt.v1","stderr_sha256":"0000000000000000000000000000000000000000000000000000000000000000","stdout_sha256":"0000000000000000000000000000000000000000000000000000000000000000"}

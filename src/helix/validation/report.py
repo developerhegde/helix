@@ -7,7 +7,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from . import design_binding, pom_policy, project_policy, property_policy, reference_scan
+from . import contracts, design_binding, evidence, pom_policy, project_policy, property_policy, reference_scan
 
 
 @dataclass(frozen=True)
@@ -26,6 +26,7 @@ class Report:
     bundle_digest: str
     verdict: str
     findings: tuple[Finding, ...]
+    maven_evidence: dict[str, Any] | None
     referenced_keys: tuple[str, ...]
     defined_keys: tuple[str, ...]
     deployment_keys: tuple[str, ...]
@@ -39,6 +40,7 @@ class Report:
             "bundle_digest": self.bundle_digest,
             "verdict": self.verdict,
             "findings": [item.as_dict() for item in self.findings],
+            "maven_evidence": self.maven_evidence,
             "references": {
                 "keys": list(self.referenced_keys),
                 "defined_keys": list(self.defined_keys),
@@ -51,6 +53,13 @@ class Report:
 def validate(project_dir: str, bundle: dict[str, Any], policy: dict[str, Any]) -> Report:
     scan = reference_scan.scan(project_dir)
     raw_findings: list[tuple[str, str]] = []
+    bundle_contract_findings = contracts.check_bundle(bundle)
+    policy_contract_findings = contracts.check_policy(policy)
+    raw_findings.extend(bundle_contract_findings)
+    raw_findings.extend(policy_contract_findings)
+    if bundle_contract_findings or policy_contract_findings:
+        findings = tuple(Finding(code, message) for code, message in sorted(set(raw_findings)))
+        return Report(_policy_version(policy), _digest(policy), _digest(bundle), "fail", findings, None, (), (), (), ())
     standards_digest = bundle.get("standards_bundle_digest")
     expected_standards_digest = policy.get("standards_bundle_digest")
     if expected_standards_digest is not None and standards_digest != expected_standards_digest:
@@ -59,6 +68,8 @@ def validate(project_dir: str, bundle: dict[str, Any], policy: dict[str, Any]) -
     raw_findings.extend(pom_policy.check(project_dir, policy))
     raw_findings.extend(project_policy.check(project_dir, policy))
     raw_findings.extend(property_policy.check(project_dir, bundle, policy, scan))
+    maven_evidence, evidence_findings = evidence.check(project_dir, policy)
+    raw_findings.extend(evidence_findings)
     if policy.get("project", {}).get("forbid_java_interop") and scan.java_interop:
         raw_findings.append(("JAVA_INTEROP", "Generated source contains Java interop."))
     expected_mappings = {item.get("id") for item in bundle.get("mappings", ()) if isinstance(item, dict)}
@@ -71,6 +82,9 @@ def validate(project_dir: str, bundle: dict[str, Any], policy: dict[str, Any]) -
         _digest(bundle),
         "pass" if not findings else "fail",
         findings,
+        ({"maven_exit_code": maven_evidence.maven_exit_code, "tests_run": maven_evidence.tests_run,
+          "failures": maven_evidence.failures, "errors": maven_evidence.errors,
+          "coverage_percent": maven_evidence.coverage_percent} if maven_evidence else None),
         tuple(sorted(scan.properties | scan.secure_properties)),
         tuple(sorted(_defined_keys(project_dir))),
         tuple(sorted(str(item) for item in bundle.get("deployment_property_keys", ()) if isinstance(item, str))),

@@ -59,7 +59,7 @@ The intake phase is three CLIs, so the step that reads untrusted text never shar
 | Step | Process class | Credentials in the process | May call |
 | --- | --- | --- | --- |
 | `helix intake-prepare` | Control plane | Helix-store role only; it reads the snapshot file the receiver wrote (section 3.5) | PostgreSQL; no Jira call |
-| `helix discover` | Control plane | Discover's connected-app pair as Meridian's exports (spine §9); broker-issued bearer for Exchange | Anypoint control plane, Exchange |
+| `helix discover` | Control plane | Broker-issued Exchange bearer; optional estate adapters receive their own least-privilege credentials through explicit adapter contracts | Exchange and explicitly enabled adapter endpoints |
 | `helix intake` | Agent sandbox | Gateway session token only (spine §9, *all* rows) | Model gateway only |
 | `helix intake-apply` | Control plane | Jira bot token, held by file 03's Jira client; helix-store role | Jira REST through file 03's `post()` and `transition()` only; PostgreSQL |
 

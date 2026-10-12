@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 
+from helix import product_identity as pid
 from helix.validation import validate
 from tests.support import run_cli
 
@@ -21,6 +22,7 @@ POLICY = {
         "forbid_java_interop": True,
     },
     "configuration": {"allowed_property_sources": ["src/main/resources/config/config.yaml"]},
+    "testing": {"minimum_application_coverage": 75},
 }
 
 
@@ -37,6 +39,12 @@ class ValidationTest(unittest.TestCase):
         self._write("src/main/resources/config/config-dev.yaml", "orders.host: ${SET_DEV}\norders.password: ${ENCRYPT_DEV}\n")
         self._write("src/main/mule/order.xml", "<mule>${orders.base} ${orders.host} ${secure::orders.password} ${env}</mule>\n")
         self._write("src/main/resources/dwl/order.dwl", "%dw 2.0\n---\n{ id: payload.id } // map:MAP-001\n")
+        self._write(f"target/{pid.CANONICAL_ID}-validation-evidence.json", json.dumps({
+            "schema": "mule_validation_evidence.v1",
+            "maven": {"exit_code": 0},
+            "munit": {"tests_run": 4, "failures": 0, "errors": 0},
+            "coverage": {"application_percent": 80},
+        }))
 
     def _write(self, relative, text):
         path = os.path.join(self.project, *relative.split("/"))
@@ -87,6 +95,27 @@ class ValidationTest(unittest.TestCase):
         policy = {**POLICY, "standards_bundle_digest": "b" * 64}
         report = validate(self.project, self._bundle(), policy)
         self.assertEqual([item.code for item in report.findings], ["STANDARDS_BUNDLE_MISMATCH"])
+
+    def test_staged_contracts_must_be_structurally_valid(self):
+        bundle = self._bundle()
+        bundle.pop("keys")
+        report = validate(self.project, bundle, POLICY)
+        self.assertEqual([item.code for item in report.findings], ["DESIGN_BUNDLE_INVALID"])
+        report = validate(self.project, self._bundle(), {"schema": "validation_policy.v1", "version": 1})
+        self.assertEqual([item.code for item in report.findings], ["VALIDATION_POLICY_INVALID"])
+
+    def test_maven_and_munit_evidence_is_required_and_checked(self):
+        self._write(f"target/{pid.CANONICAL_ID}-validation-evidence.json", json.dumps({
+            "schema": "mule_validation_evidence.v1",
+            "maven": {"exit_code": 1},
+            "munit": {"tests_run": 4, "failures": 1, "errors": 0},
+            "coverage": {"application_percent": 74},
+        }))
+        report = validate(self.project, self._bundle(), POLICY)
+        self.assertEqual([item.code for item in report.findings], ["COVERAGE_BELOW_THRESHOLD", "MAVEN_BUILD_FAILED", "MUNIT_FAILED"])
+        os.remove(os.path.join(self.project, "target", f"{pid.CANONICAL_ID}-validation-evidence.json"))
+        report = validate(self.project, self._bundle(), POLICY)
+        self.assertEqual([item.code for item in report.findings], ["MAVEN_EVIDENCE_MISSING"])
 
     def test_policy_and_source_failures_are_reported(self):
         self._write(".github/workflows/build.yml", "name: forbidden\n")

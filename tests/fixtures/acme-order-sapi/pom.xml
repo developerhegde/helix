@@ -1,0 +1,22 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>example</groupId>
+    <artifactId>helix-parent</artifactId>
+    <version>1.0.0</version>
+  </parent>
+  <groupId>acme</groupId>
+  <artifactId>acme-order-sapi</artifactId>
+  <version>1.0.0</version>
+  <properties>
+    <mule.version>4.9.1</mule.version>
+  </properties>
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.mule.tools.maven</groupId>
+        <artifactId>mule-maven-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+</project>
