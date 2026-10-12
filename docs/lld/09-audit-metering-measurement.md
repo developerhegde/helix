@@ -1,5 +1,7 @@
 # 09 — Audit, metering and measurement
 
+> Standalone revision, 2026-10-12: the audit chain is now Helix's own, written by `helix.audit.chain` and verified in process by `helix audit verify`, and every mechanism that came from Meridian is replaced, withdrawn or marked "To design".
+
 ## 1. Purpose and scope
 
 This file designs three things that let a run be trusted afterwards: the **audit chain** (who did what, when, under which model and which approval), the **meter** (what every model call cost, and the caps that stop spending), and the **measurement** (was the work accepted, and how many minutes the humans spent at each gate). The pilot is held to all three from its first real ticket, so they start in B2 and finish in B5. B3 and B4 add gates 1 and 2 to the measurement. Deploy (B6) is out of scope; gate 4 is reserved in every enum.
@@ -21,6 +23,7 @@ This file owns `audit_event.v1`, `meter_event.v1` and the commands `helix audit 
 | Plan §3.2, *The measurement* | *Accepted* (non-author merge, change requests, hand rewrites) and *reviewer minutes*; a pilot that cannot record the minutes has not run | 3.13, guard G14 |
 | Plan §3.2, *Exits* | A capped run stops and posts one line with where and what it spent | 3.11, section 4 |
 | Audit and metering contract | Helix-owned hash-chain records with provenance, durable storage, independent verification, metering per run and phase, cache hit rate, loops, and rework per run | 3.3–3.12 |
+| Standalone architecture decision (2026-10-09; 00 §2) | Helix writes and verifies its own chain: no other tool is imported, invoked or required, and the chain's files live under `$HELIX_STATE_ROOT` | 3.1–3.4, 3.7 |
 | Plan §3.5, *Guardrails* | One altered record reports the break at that record; the cap holds at one token over and the next phase never starts | G1, G2, G9 |
 | Plan §4, decisions 6, 11, 12 | Turnaround; dollar cap default; acceptance target | 3.11, 3.13 |
 | Plan §5 | No cryptographic signature on the chain | 3.8 |
@@ -32,14 +35,14 @@ This file owns `audit_event.v1`, `meter_event.v1` and the commands `helix audit 
 | `[HLD-P#15]` | A run is a ticket workflow's lifetime; sub-caps per phase attempt; metered per model call; per-client monthly ceilings; kill switch | 3.11 |
 | File 08, open item 3 and §3.12 | Chain appends deduplicated by `event_key`; the record types 08 writes, including `stale_presentation`, the launch evidence and the head-verification verdict | 3.3.2, 3.4; 08's record names mapped in 3.4 |
 | File 05 §3.15 | Intake's audit events and the four types it asks for | 3.4 |
-| File 01 §3.5.4–3.5.5 | `runlog.open_segment` and the pilot's durable state root; the layout and linking of chain files are 09's | 3.3, 3.3.1 |
-| File 03 §3.1 rule 4, §3.5.5, §3.6.3, open item 16 | Shared services hand audit facts to 09 without importing `RunLog`; lease issue, redeem and revoke are audited; a released Draft is chained | 3.1, 3.4 (`credential_issued`, `lease_closed`, `draft_released`) |
+| File 01 §3.5.5 | The pilot's durable state root; the layout and linking of chain files are 09's | 3.3, 3.3.1 |
+| File 03 §3.1 rule 4, §3.5.5, §3.6.3, open item 16 | Shared services hand audit facts to 09 without writing the chain themselves; lease issue, redeem and revoke are audited; a released Draft is chained | 3.1, 3.4 (`credential_issued`, `lease_closed`, `draft_released`) |
 | File 10 §3.5 rule 5, §4 | Every refusal reaches the chain; codes go where their owners put them | 3.4 (`security_refusal`) |
 | `[HLD-P#16]` | An *ask* is a logged deny that stops the phase | 3.4 (`tool_call_summary.denied`) |
 | `[HLD-P#17]` | An INCOMPLETE run is excluded from measurement | 3.13 |
 | `[HLD-P#18]` | Active minutes and elapsed wait at every gate; decision 12 stated as active minutes | 3.13 |
 | `[HLD-P lower: audit chain]` (review item 24) | Threat model; chain-head digest in the PR and a Jira comment at each gate | 3.6, 3.8 |
-| `[HLD-P lower: Meridian surface]` (review item 19) | Contract tests over every Meridian name, variable and output used, including environment variables and the runlog and database schemas | 3.2, G18; the environment-variable, run-log and action-log schema contract tests are file 01's (01 §3.6) |
+| `[HLD-P lower]` dependency-surface contract tests (review item 19) | Withdrawn (standalone decision): core Helix uses no Meridian name, variable or output, so there is no such surface to test. Contract tests pin Helix's own chain schemas instead | 3.2, G18 |
 | Conventions 00 §1 | An `[HLD-P#n]` item must be removable, with the file saying how | 3.17 |
 
 ## 3. Design
@@ -48,95 +51,103 @@ This file owns `audit_event.v1`, `meter_event.v1` and the commands `helix audit 
 
 | Module (00 §3) | Process class | Responsibility | Tag |
 | --- | --- | --- | --- |
-| `helix.audit.chain` | Control plane | `ChainWriter`: skips events whose `event_key` is already written (3.3.2), then opens, writes and seals segments; redacts; records segment and event-key rows | `[LLD]` |
+| `helix.audit.chain` | Control plane for writing; anywhere for the read-only segment check | `ChainWriter`: skips events whose `event_key` is already written (3.3.2), then opens a segment, appends each record under the run's exclusive file lock with `fsync`, and seals it; redacts; records segment and event-key rows. Also the canonical JSON and hash rules of 3.2, and `verify_segment`, the in-process check of one segment file | Standalone architecture decision |
 | `helix.audit.events` | Any | Builds and validates `audit_event.v1` dicts; computes `agent_definition_hash` and `prompt_hash` per 3.4 | `[LLD]` |
 | `helix.audit.anchor` | Control plane | Formats anchor lines; writes them through the Jira client and the git writer; parses them back | `[HLD-P lower]` |
-| `helix.audit.verify` | Anywhere with read access to durable run records and the read-only store role `helix_audit_reader`; `--check-anchors` only in the control plane | `helix audit verify`; verifies Helix segment hashes, index records and external anchors | `[LLD]` |
+| `helix.audit.verify` | Anywhere with read access to durable run records and the read-only store role `helix_audit_reader`; `--check-anchors` only in the control plane | `helix audit verify`: recomputes every segment's hashes in process, then checks segment links, index records, the copy, gate rows and external anchors | Standalone architecture decision |
 | `helix.metering.pricing` | Control plane | Loads and checks `price_table.v1`; prices one call | `[LLD]` |
 | `helix.metering.caps` | Control plane (`open_phase_attempt` for issuance, the gateway per call) | Issuance, admission and settlement against the attempt, run, client-day and client-month balances (3.11) | `[HLD-P#15]` |
 | `helix.metering.metrics` | Anywhere | Per-run metrics from the store | `[PLAN]` metrics, `[LLD]` formulas |
 | `helix.metering.measurement` | Control plane | `record_measurement(run_id)` and the window sweep, run as `helix meter measure` (3.13): collects accepted, change requests, hand rewrites, minutes; owns the measurement status | `[PLAN]` `[HLD-P#18]` |
 | `helix.metering.report` | Anywhere | `helix meter report` | `[PLAN]` |
-| `helix.meridian_bridge.runlog` | Control plane | The only import of `meridian.runlog`; a thin adapter (00 §2) | `[PLAN-DEFAULT 5]` |
 
-**No agent writes the chain or the meter.** The agent sandbox has no `MERIDIAN_HOME`, no mount under `$HELIX_STATE_ROOT` and no store credential. Every chain record is written by control-plane code. Agent-side facts (the tool log, the phase result) reach the chain only as summaries and SHA-256 digests read by a control-plane activity after the sandbox exits. `[HLD-P#1]` `[LLD]`
+Withdrawn (standalone decision): the bridge module that was the only import of Meridian's run log. `helix.audit.chain` writes and checks the chain itself. None of the modules in this table is built yet: `src/helix/` holds no `audit` or `metering` package at this revision, and this file is their design.
 
-**Nor do the agent launcher or the shared services.** The launcher never imports `meridian` (08 §3.14), and the gateway, broker and receiver hand no record to `RunLog` (03 §3.1 rule 4). They write store rows (`gateway_session`, `credential_lease`, `meter_event`, `ticket_event`), and the next control activity of that run chains them under the row form of `event_key` (3.3.2). This is the per-client audit writer that 03's open item 16 asks for: the store is the queue, and a per-client control process is the writer. Which events record those rows is in 3.4: `credential_issued` and `lease_closed` for leases, `cap_stop` for refused calls, and `off_path_event`, `pr_closed` and the gate records for ticket events. `[LLD]`
+**No agent writes the chain or the meter.** The agent sandbox has no mount under `$HELIX_STATE_ROOT` and no store credential. Every chain record is written by control-plane code. Agent-side facts (the tool log, the phase result) reach the chain only as summaries and SHA-256 digests read by a control-plane activity after the sandbox exits. `[HLD-P#1]` `[LLD]`
 
-### 3.2 Meridian interfaces used (grounded in the pinned source)
+**Nor do the agent launcher or the shared services.** The launcher never imports `helix.audit.chain`, and the gateway, broker and receiver hand no record to `ChainWriter` (03 §3.1 rule 4). They write store rows (`gateway_session`, `credential_lease`, `meter_event`, `ticket_event`), and the next control activity of that run chains them under the row form of `event_key` (3.3.2). This is the per-client audit writer that 03's open item 16 asks for: the store is the queue, and a per-client control process is the writer. Which events record those rows is in 3.4: `credential_issued` and `lease_closed` for leases, `cap_stop` for refused calls, and `off_path_event`, `pr_closed` and the gate records for ticket events. `[LLD]`
 
-Everything below was read in Meridian v1.8.1 (`meridian/__init__.py:15`). Decision 5's contract test holds each row against the pinned wheel `[PLAN-DEFAULT 5]` `[HLD-P lower: Meridian surface]`.
+### 3.2 Chain record format and hash algorithm
 
-| Name | Source | What Helix relies on |
+Withdrawn (standalone decision): this section listed the Meridian names, source lines and behaviours the chain was built on: its run log, its verify command, its state directory and its database. Core Helix uses none of them. The section now holds the Helix-owned format that replaces them. Nothing was ever written in the earlier format, because the audit module is not built, so no old chain files need migrating.
+
+`helix.audit.chain` owns the rules below.
+
+| Item | Rule | Tag |
 | --- | --- | --- |
-| `RunLog(run_id=None, directory=None)` | `meridian/runlog.py:91` | Creates `{directory}/{run_id}.jsonl` with owner-only directory permissions (`fsutil.private_dir`). A new instance always starts its chain at genesis (`_prev_hash = "0" * 64`, line 97). **It cannot resume an existing file**: a second instance on the same `run_id` would append records whose `prev` is genesis and break the chain |
-| `RunLog.start(mode, envs, context)` | `runlog.py:156` | Writes `type=run_start` with `operator`, `signed_in`, `host`, `platform`, `python`, `tool_version` (Meridian's version) and our `context` dict |
-| `RunLog.note(message, **fields)` | `runlog.py:176` | Writes `{"type": "note", "run_id": ..., "message": ..., **fields}`. Our fields are spread at the top level, after `type` and `run_id`, so a field named `type` or `run_id` would overwrite them |
-| `RunLog.finish(summary: RunSummary)` | `runlog.py:180` | Writes `type=run_end` and closes the instance; any later append raises `RuntimeError("run log is closed")` |
-| `RunSummary(run_id, started_at, finished_at, mode, envs, counts, duration_s, operator, ...)` | `runlog.py:62` | Required by `finish` |
-| Chain algorithm | `runlog.py:109-124` | Each record gets `ts` (UTC ISO) and `prev`. `payload = json.dumps(record, sort_keys=True, default=str, separators=(",", ":"))`; `hash = sha256(prev + payload)`; one line per record, `fsync` after each write |
-| `RunLog.mirror_error`, `RunLog.mirrored` | `runlog.py:105-106`, `126-142` | After the file write, each record is copied to Meridian's `action_log` through `db.audit.mirror_run_record`. The first copy failure stops the copy for that instance and is kept on `mirror_error`; the file goes on |
-| `db.audit.mirror_run_record` | `meridian/db/audit.py:19` | Calls `bootstrap.ensure_ready`, which migrates the Meridian database to head (`db/bootstrap.py:225`). **The writer migrates** `[PLAN]` |
-| `db.audit.copy_verdict(run_ref, file_hashes)` | `db/audit.py:32` | A read that never migrates. States: `identical`, `incomplete`, `absent`, `broken`, `differs`, `unavailable`; `FINDINGS = ("broken", "differs")` |
-| `RunLog.verify(path)` | `runlog.py:196` | Returns `{valid, records, broken_at, reason?}`; `broken_at` is the 0-based index of the first bad record. It cannot see records cut from the end or a file deleted whole (docstring, lines 207-212) |
-| `meridian runs --verify RUN_ID_OR_PATH` | `meridian/cli.py:2649-2681`, parser `5858-5868` | Takes a path, or a run id looked up under the import-time `RUN_LOG_DIR`. Prints JSON: `RunLog.verify`'s result plus `action_log` = `copy_verdict(path.stem, hashes)`. Exit **0** valid with no copy finding; **1** chain invalid or copy `broken`/`differs`; **2** no log at that path (`EXIT_ERROR`); **3** is `EXIT_PREFLIGHT` (`cli.py:56`), which the wrapper treats as an error |
-| State directory | `meridian/settings.py:58-101` (`_state_dir`; the variable is read at line 72) | Meridian reads **`MERIDIAN_HOME`**, not `MERIDIAN_STATE_DIR`; `MERIDIAN_STATE_DIR` is read nowhere in `meridian/`. `RUN_LOG_DIR = STATE_DIR / "runs"` is bound at import (`settings.py:568-569`) |
-| Database URL | `meridian/db/engine.py:46-59` | `MERIDIAN_DATABASE_URL`, else `sqlite:///{state_dir()}/meridian.db`, resolved at call time |
-| SQLite pragmas | `meridian/db/engine.py:145-151` (`_sqlite_on_connect`, registered at line 70) | On **every** SQLite connection, including the read inside `copy_verdict`: `PRAGMA journal_mode=WAL`, `foreign_keys=ON`, `busy_timeout=15000` (`SQLITE_BUSY_TIMEOUT_MS`), `synchronous=NORMAL`. No migration runs, but the first connection to a database not yet in WAL mode rewrites its header, and a WAL database needs `-wal` and `-shm` files beside it and shared memory on one host (SQLite behaviour, `[VERIFY]` on the pinned SQLite) |
-| Action-log redaction keys | `meridian/db/repositories/actions.py:39-40` (`_EXTRA_SECRET_KEYS`), `54-68` (`_redact`), `224-225` (where it applies), `285-335` (`mirror`); `meridian/estate/client_inventory.py:74-76` (`SECRET_KEYS`) | `_redact` replaces the value of any key in `SECRET_KEYS \| _EXTRA_SECRET_KEYS`, stripped and lower-cased: `clientsecret`, `client_secret`, `secret`, `password`, `token`, `access_token`, `refresh_token`, `consumersecret`, `consumer_secret`, `authorization`, `api_key`, `apikey`, `bearer`, `x-api-key`. It applies only to the `request` and `response` of the action log's own records (`_append`). `mirror` stores a run-log record as written and re-derives its hash, so it redacts nothing: a secret in a Helix event would reach the copy. Helix therefore redacts before `note()` (3.4) |
-| Copy continuity | `meridian/db/repositories/actions.py:300-306` | The copy refuses a record whose `prev` is not the hash of the last record it holds for that `run_ref`. Each segment is its own `run_ref`, so every segment starts a fresh copy chain at genesis |
-| `MERIDIAN_ACTOR` | `runlog.py:280-283` | Becomes `signed_in` on `run_start` and `performed_by` on the copy |
-| Doctor run-log check | `meridian/doctor.py:778-843` (`check_run_logs`) | Verifies every `*.jsonl` in `{state}/runs`; a log without `run_end` is counted as unfinished, not failed |
+| Line | One record per line: the record as canonical JSON, then one `\n` | Standalone architecture decision |
+| Canonical JSON | UTF-8; object keys sorted; no insignificant whitespace, so the only separators are `,` and `:` | Standalone architecture decision |
+| Record kinds | A segment's first line is one `audit_segment_header.v1` record (3.3). Every later line is one `audit_event.v1` record (3.4); in a sealed segment the last of them is the `segment_sealed` event | Standalone architecture decision; the seal record is `[LLD]` (O23) |
+| `seq` | Integer ≥ 1 on every record: 1 for the first record of the run, which is the header of `s0001`, then one more for each record, running on across segments. Headers and seal records count | Standalone architecture decision |
+| `prev_hash` | 64 lowercase hex on every record: the `hash` of the record whose `seq` is one less. For `seq` 1 it is the genesis value, sixty-four `0` characters | Standalone architecture decision; the genesis value is `[LLD]` |
+| `hash` | 64 lowercase hex on every record: SHA-256 over the UTF-8 bytes of `prev_hash` followed by the canonical JSON of the record without its `hash` field. So `seq` and `prev_hash` are inside the hashed bytes | Standalone architecture decision |
+| Append | Under the run's exclusive file lock (3.3): write the line, then `fsync` the file before the next record is written or the lock is released. A new segment file is created exclusively, so an existing file is never opened for writing. A written line is never rewritten or removed | Standalone architecture decision |
+| Reserved keys | `seq`, `prev_hash` and `hash` are set only by `ChainWriter`. Both schemas forbid a caller from supplying them | `[LLD]` |
+| Check | `verify_segment(path)` reads one segment file and returns `{valid, records, broken_at, reason}`. For every line it checks that the line parses, is byte for byte its own canonical form and carries the three chain fields; that `hash` equals the recomputed value; that `prev_hash` equals the `hash` of the line before; and that `seq` is the `seq` of the line before plus 1. `broken_at` is the 0-based index of the first bad line, or null. `ChainWriter` (3.3 step 3) and `helix audit verify` (3.7) both call it in process | Standalone architecture decision |
 
-Consequences for Helix:
+What follows for the rest of this file:
 
-| Consequence | Decision | Tag |
+| Fact | Decision | Tag |
 | --- | --- | --- |
-| `RunLog` cannot resume a file, and a run lasts days across many processes | The chain of one run is a sequence of **segments**: one `RunLog` file per batch of writes, linked by the previous segment's head (3.3) | `[LLD]` |
-| `RUN_LOG_DIR` is fixed at import | The bridge always passes `directory=` explicitly, and `helix audit verify` always passes an absolute path | `[LLD]` |
-| Meridian reads `MERIDIAN_HOME` | Every process that writes the chain exports `MERIDIAN_HOME` = `$HELIX_STATE_ROOT/{client_id}/meridian/` (00 §7, §9). `helix audit verify` sets it too, outside the control plane (3.7, O1). Helix never sets `MERIDIAN_STATE_DIR` | `[PLAN]` location, Meridian source for the name (00 §7) |
-| Meridian forces WAL on SQLite | One host at a time writes a client's state directory, on local or block storage; every process that opens `meridian.db`, verify included, needs write access to the directory for the `-wal` and `-shm` side files (3.3) | `[LLD]` |
-| `note()` lets fields overwrite `type` and `run_id` | `type`, `run_id`, `message`, `ts`, `prev` and `hash` are reserved. The schema forbids them as Helix keys, and Helix's run id is carried as `helix_run_id` | `[LLD]` |
+| A run lasts days, and each control activity is its own short process | The chain of one run is a sequence of **segments**: one file per batch of writes, each opened by a header that carries the previous segment's head hash (3.3) | `[LLD]` |
+| The chain lives under the Helix state root | `ChainWriter` and `helix audit verify` build the audit directory from `$HELIX_STATE_ROOT` and the run's `client_id`, or take it as an explicit absolute path. No other variable names it, and nothing is fixed at import | Standalone architecture decision (O20) |
+| An append relies on the file lock and on `fsync` | One host at a time writes a client's audit directory, on local or block storage (3.3) | `[LLD]` |
+| The chain fields are reserved | `seq`, `prev_hash` and `hash` are forbidden as event keys. The run id stays `helix_run_id`, the name other files already use | `[LLD]` |
+
+A process can die while it writes a line. A last line with no `\n`, or a segment file with no complete header, makes `verify_segment` report that segment invalid, so the next `open` refuses with `AuditChainBroken` and an operator decides (section 4). A safe automatic recovery is **To design** (O21).
 
 ### 3.3 Chain storage and segments
 
 | What | Where | Tag |
 | --- | --- | --- |
-| Meridian state (the chain's home) | `{MERIDIAN_HOME}` = `$HELIX_STATE_ROOT/{client_id}/meridian/` (00 §7) under every runner: in B2 on the pilot host's local block storage, bind-mounted into both control jobs (01 §3.5.5); in B3–B5 on file 08's control-plane host | `[PLAN]` location, B2 mount per 01 |
-| Segment files | `{MERIDIAN_HOME}/runs/{segment_id}.jsonl` | `[LLD]` |
+| Audit directory (the chain's home) | `$HELIX_STATE_ROOT/{client_id}/audit/` under every runner: in B2 on the pilot host's local block storage, bind-mounted into both control jobs (01 §3.5.5); in B3–B5 on file 08's control-plane host. The directory and its files are readable and writable by their owner only | Standalone architecture decision; B2 mount per 01 |
+| Segment files | `$HELIX_STATE_ROOT/{client_id}/audit/{segment_id}.jsonl`, that is `{run_id}.s{NNNN}.jsonl` | Standalone architecture decision |
 | Segment id | `{run_id}.s{NNNN}`, `NNNN` zero-padded from `0001`, at most `9999`. Example: `acme.ACME-123.s0007` | `[LLD]` |
-| Lock file | `{MERIDIAN_HOME}/runs/{run_id}.lock` (exclusive `flock`) | `[LLD]` |
-| Copy (action log) | Meridian's database at `{MERIDIAN_HOME}/meridian.db`, table `action_log`, `run_ref` = segment id. `MERIDIAN_DATABASE_URL` is not set (08 §3.14), and 01's bridge refuses it (01 §3.5.2) | `[PLAN]` copy, `[LLD]` SQLite |
+| Lock file | `$HELIX_STATE_ROOT/{client_id}/audit/{run_id}.lock` (exclusive `flock`) | `[LLD]` |
+| Copy | A Helix-owned second copy of every record, keyed by segment id (*The copy*, below). Its storage is **To design** (O19) | Standalone architecture decision; To design |
 | Segment index | Helix store tables `audit_segment` and `audit_event_key` (3.15) | `[LLD]` |
 
 **Durability, by sub-phase.**
 
 | Sub-phase | Where the chain lives | Real tickets allowed? | Tag |
 | --- | --- | --- | --- |
-| B2 | `$HELIX_STATE_ROOT/{client_id}/meridian/` on the always-on pilot host's local block storage. Both control jobs (`control-pre`, `control-post`) run as containers on that host with `{state_root}/{client_id}` bind-mounted read-write; the agent job mounts none of it (01 §3.5.5, §3.8). `$RUNNER_TEMP` is never a state root, and `bind_control` refuses a state root without the RUNBOOK's `.helix-state-root` marker (01 §3.5.5). `audit_segment` and `audit_event_key` rows go to the Helix store, which `helix run` reaches through `HELIX_DATABASE_URL` (01 §3.3); the heads go to the PR body and Jira (3.6) | Only on that durable mount. Plan §7 item 2 requires one real ticket in B2, and its chain must outlive the jobs. A pilot that cannot mount the state root runs synthetic `acme-*` tickets only | `[LLD]`, following 01 §3.5.5 (01: `[HLD-P#6]` `[LLD]`); stricter than the HLD's "B2 imports it; B5 makes it durable" |
-| B3–B4 (08's driver, 08 §3.16) and B5 | `$HELIX_STATE_ROOT/{client_id}/meridian/` on file 08's control-plane host, local block storage (08 §3.2), never the worker's home | Yes | `[PLAN]` (plan §3.5 *Writes*) |
+| B2 | `$HELIX_STATE_ROOT/{client_id}/audit/` on the always-on pilot host's local block storage. Both control jobs (`control-pre`, `control-post`) run as containers on that host with `{state_root}/{client_id}` bind-mounted read-write; the agent job mounts none of it (01 §3.5.5, §3.8). `$RUNNER_TEMP` is never a state root, and 01's state-root check refuses a root without the RUNBOOK's `.helix-state-root` marker (01 §3.5.5; O16). `audit_segment` and `audit_event_key` rows go to the Helix store, which `helix run` reaches through `HELIX_DATABASE_URL` (01 §3.3); the heads go to the PR body and Jira (3.6) | Only on that durable mount. Plan §7 item 2 requires one real ticket in B2, and its chain must outlive the jobs. A pilot that cannot mount the state root runs synthetic `acme-*` tickets only | `[LLD]`, following 01 §3.5.5 (01: `[HLD-P#6]` `[LLD]`); stricter than the HLD, which makes the chain durable only in B5 |
+| B3–B4 (08's driver, 08 §3.16) and B5 | `$HELIX_STATE_ROOT/{client_id}/audit/` on file 08's control-plane host, local block storage (08 §3.2), never the worker's home | Yes | `[PLAN]` durable storage (plan §3.5 *Writes*); the directory is the standalone decision's |
 
-**Storage rules that follow from Meridian's WAL** (3.2, `db/engine.py:145-151`) `[LLD]`:
+**Storage rules** `[LLD]`:
 
-1. One control-plane host at a time writes a given client's state directory, and that directory sits on local or block storage, never on a network file system. A WAL database needs shared memory on one host `[VERIFY]` for the chosen storage product (O14). File 08 places each client's chain-writing activities on that host (O3).
+1. One control-plane host at a time writes a given client's audit directory, and that directory sits on local or block storage, never on a network file system. The run lock and the `fsync` of each append must hold on the chosen storage product `[VERIFY]` (O14). File 08 places each client's chain-writing activities on that host (O3).
 2. The storage honours `flock` (the run lock) `[VERIFY]` for the chosen product (O14).
-3. Every process that opens `meridian.db`, `helix audit verify` included, needs write access to the directory: SQLite creates the `-wal` and `-shm` files there. Verify never changes the database's content (3.7).
-4. If one host per client cannot be kept, the fallback is a per-client PostgreSQL database for the copy through `MERIDIAN_DATABASE_URL` (`db/engine.py:46-59`). The segment files and their lock would still need one host. This is not the default. It needs a `[VERIFY]` that Meridian 1.8.1's action log runs on PostgreSQL, and a change to 01's bridge, which refuses the variable today (01 §3.5.2; 08 open item 18).
+3. Withdrawn (standalone decision): the rule that every reader needs write access to the directory. It came from Meridian's database, which was opened in a mode that writes side files. `helix audit verify` opens segment files read-only and writes nothing (3.7).
+4. Withdrawn (standalone decision): the fallback of a per-client PostgreSQL database for Meridian's copy. Where the Helix-owned copy lives is To design (O19).
 
-**What a segment is.** A sealed batch of records written by one control-plane process: one `RunLog` instance from `start()` to `finish()`. A control-plane activity writes one segment, or two when it anchors, because an anchor cannot sit inside the segment whose head it publishes (3.6). A retried activity whose events were all written before writes none (3.3.2). Segment `n`'s `run_start.context.prev_segment_head` holds the `hash` of the last record of segment `n-1`, so the segments form one chain across files. `[LLD]`
+**The copy** (Standalone architecture decision; storage **To design**, O19). Withdrawn (standalone decision): Meridian's action log as the second copy of every record. Helix keeps the behaviour and owns it. After a record is written to its segment file, `ChainWriter` copies it, as written, to a Helix-owned copy keyed by segment id. For each segment the copy takes the header as its start and refuses a later record whose `prev_hash` is not the `hash` of the last record it holds. The first failure stops the copy for that segment and is kept as `mirror_error`; the file goes on, because the file is the record. A read of a segment's copy gives one of six states, by comparing record hashes and never record content:
+
+| State | Meaning |
+| --- | --- |
+| `identical` | The copy holds the same record hashes as the file, in the same order |
+| `incomplete` | The copy holds the first part of the file's records and no more |
+| `absent` | The copy holds no record of the segment |
+| `broken` | The copy's own records do not form a valid chain |
+| `differs` | The copy's chain is valid but disagrees with the file: another hash at some index, or more records than the file |
+| `unavailable` | The copy cannot be read |
+
+`broken` and `differs` are findings; 3.7 step 6 judges the other states against the segment's row. Where the copy is stored, its schema and its reader are not designed here; a table in the Helix store is the expected home.
+
+**What a segment is.** A sealed batch of records written by one control-plane process: one header, the batch's events, and the seal record. A control-plane activity writes one segment, or two when it anchors, because an anchor cannot sit inside the segment whose head it publishes (3.6). A retried activity whose events were all written before writes none (3.3.2). Segment `n`'s header holds the `hash` of the last record of segment `n-1`, as its `prev_segment_head` and as its own `prev_hash`, so the segments form one chain across files. `[LLD]`
 
 **Opening a segment** (`ChainWriter.open(run_id, opened_by)`), under the lock. Steps 1–5 are also the first half of `ChainWriter.record` (3.3.2):
 
 1. Take the run's lock, waiting at most 120 seconds; otherwise raise `AuditLockTimeout`. `[LLD]`
-2. Read the `audit_segment` rows. If the last row is `open` and has no file, a process died between steps 7 and 8: mark it `abandoned`. Its number is never reused. If the last row is `open` and its file ends in `run_end`, the process died between `finish()` and the row update: complete the row from the file (`state = sealed`, `closed_at` = the `run_end` record's `ts`, `head_hash`, `records`; `mirrored` and `mirror_error` stay null, meaning unknown). Let `k` be the highest segment number that has a file. A file with no row, or a row other than `abandoned` with no file, raises `AuditIndexMismatch`.
-3. If `k > 0`, run `RunLog.verify` on segment `k`. If it is not valid, raise `AuditChainBroken`: tampering is caught at the next write, not only at the next verify.
-4. Read segment `k`'s last record's `hash`. If segment `k` is sealed and its `audit_segment.head_hash` differs, raise `AuditIndexMismatch`.
+2. Read the `audit_segment` rows. If the last row is `open` and has no file, a process died between steps 7 and 8: mark it `abandoned`. Its number is never reused. If the last row is `open` and its file ends in the seal record, the process died between writing the seal and the row update: complete the row from the file (`state = sealed`, `closed_at` = the seal record's `occurred_at`, `head_hash`, `records`; `mirrored` and `mirror_error` stay null, meaning unknown). Let `k` be the highest segment number that has a file. A file with no row, or a row other than `abandoned` with no file, raises `AuditIndexMismatch`.
+3. If `k > 0`, run `verify_segment` (3.2) on segment `k`. If it is not valid, raise `AuditChainBroken`: tampering is caught at the next write, not only at the next verify.
+4. Read the `hash` and the `seq` of segment `k`'s last record. If segment `k` is sealed and its `audit_segment.head_hash` differs, raise `AuditIndexMismatch`.
 5. Backfill the event-key index from segment `k` (3.3.2). Only segment `k` can hold unindexed keys, because every earlier segment was backfilled when its successor was opened.
 6. The new number is one more than the highest number in the rows (abandoned ones included). Refuse with `AuditIndexMismatch` if that file already exists (no overwrite, ever).
 7. Insert the `audit_segment` row with `state = open`.
-8. Call file 01's `meridian_bridge.runlog.open_segment(segment_id, directory=MERIDIAN_HOME/runs)`, which constructs `RunLog(run_id=segment_id, directory=...)`, then `start(mode="helix", envs=[], context=header)` (header below). `prev_segment_id` names segment `k`, so the link skips an abandoned number.
+8. Create `{segment_id}.jsonl` in the audit directory, exclusively, and append the header record (below). Its `seq` is one more than segment `k`'s last `seq` and its `prev_hash` is segment `k`'s last `hash`; for `s0001` they are 1 and the genesis value (3.2). `prev_segment_id` names segment `k`, so the link skips an abandoned number.
 
-**Sealing** (`ChainWriter.seal()`): `finish(RunSummary(...))` with `counts` = events by type; then update the `audit_segment` row to `state = sealed` with `closed_at`, `head_hash`, `records`, `mirrored` and `mirror_error`; then release the lock. A process that dies before sealing leaves an unsealed segment. The next open links to its last record, and verify reports it as `SEGMENT_UNSEALED` (information only), as Meridian's doctor does. `[LLD]`
+**Sealing** (`ChainWriter.seal()`): append the `segment_sealed` record (3.4) with `counts` = events by type; then update the `audit_segment` row to `state = sealed` with `closed_at`, `head_hash`, `records`, `mirrored` and `mirror_error`; then release the lock. A process that dies before sealing leaves an unsealed segment. The next open links to its last record, and verify reports it as `SEGMENT_UNSEALED` (information only). `[LLD]`
 
 Single writer: the workflow (file 08) never runs two chain-writing activities of one run at the same time, and the lock enforces it if it does. `[LLD]`
 
@@ -144,50 +155,45 @@ Single writer: the workflow (file 08) never runs two chain-writing activities of
 stateDiagram-v2
   [*] --> Opening: ChainWriter.open
   Opening --> Refused: lock timeout / previous segment invalid / index mismatch / file exists
-  Opening --> Open: run_start written (prev_segment_head)
-  Open --> Open: one RunLog record per audit_event.v1
-  Open --> Sealed: finish() writes run_end, audit_segment sealed
+  Opening --> Open: header written (prev_segment_head)
+  Open --> Open: one line per audit_event.v1
+  Open --> Sealed: segment_sealed written, audit_segment sealed
   Open --> Unsealed: process died
   Sealed --> [*]
   Unsealed --> [*]: next open links to its last record
   Refused --> [*]: activity FAILED, exit 2
 ```
 
-**Segment header**: the `context` passed to `RunLog.start()`. `[LLD]`
+**Segment header**: the first record of every segment, with schema `audit_segment_header.v1`. `[LLD]`
 
 | Field | Type | Constraint | Example |
 | --- | --- | --- | --- |
 | `schema` | string | const `audit_segment_header.v1` | |
+| `seq`, `prev_hash`, `hash` | integer, string, string | the chain fields of 3.2, set by `ChainWriter`; `prev_hash` equals `prev_segment_head` | `118`, `9f86d0...0a08`, `4b227...b9a1` |
 | `helix_run_id` | string | 00 §6 `run_id` | `acme.ACME-123` |
 | `client_id` | string | 00 §6 | `acme` |
 | `ticket_key` | string | 00 §6 | `ACME-123` |
 | `segment_no` | integer | 1–9999 | `7` |
 | `prev_segment_id` | string or null | null only for `s0001` | `acme.ACME-123.s0006` |
-| `prev_segment_head` | string or null | 64 lowercase hex; null only for `s0001` | `9f86d0...0a08` |
-| `prev_segment_sealed` | boolean or null | false when the previous segment ended without `run_end` | `true` |
+| `prev_segment_head` | string | 64 lowercase hex: the previous segment's head hash; the genesis value (3.2) for `s0001` | `9f86d0...0a08` |
+| `prev_segment_sealed` | boolean or null | false when the previous segment ended without its seal record; null for `s0001` | `true` |
 | `opened_by` | object | `{component, activity, phase_attempt_id?}` | `{"component":"controlplane","activity":"close_phase_attempt","phase_attempt_id":"acme.ACME-123.build.2"}` |
+| `opened_at` | string | RFC 3339 UTC | `2026-11-03T10:41:07Z` |
 | `helix_version` | string | Helix's package version | `0.1.0` |
 
-`run_start`'s own fields add `tool_version` (Meridian's version) and the host. `MERIDIAN_ACTOR` is set to `helix:{run_id}`, the value file 08 uses for its control subprocesses (08 §3.14), so `signed_in` and the copy's `performed_by` name Helix and the run rather than a container user. Meridian reads it from the environment only (`ACTOR` is in `ENV_ONLY_SETTINGS`, `settings.py:159-161`); file 01 §3.5.2 sets the same value. `[LLD]` (O1)
+Withdrawn (standalone decision): the fields that Meridian's run log added to its start record (its own version, the host and the signed-in actor), and the actor variable that was exported to chain-writing processes so that those fields named Helix. `opened_by` names the Helix component and activity that wrote the segment, and the copy records the same value as its writer. `[LLD]` (O1, O3)
 
-#### 3.3.1 File 01's bridge and the pilot's state root
+#### 3.3.1 The pilot's state root
 
-File 01 owns `meridian_bridge` and has adopted this file's segment layout (01 §3.5.5). The calls this file makes: `[LLD]`
-
-| File 01 (01 §3.5.4–3.5.5) | Used here | Status |
-| --- | --- | --- |
-| `runlog.open_segment(segment_id, *, directory) -> RunLog`, control class only | `ChainWriter.open` step 8, with `directory` = `{MERIDIAN_HOME}/runs`; one file per segment, `{run_id}.s{NNNN}.jsonl`. An attempt usually has two segments, one at open and one at close (3.5) | Adopted by 01 |
-| `open_segment` refuses an existing file (01 G13) | Step 6; this file's G8 | Adopted |
-| `runlog.chain_head(path) -> str` | Step 4 | Adopted |
-| `runlog.runs_verify(*, chain_file) -> ChainVerdict` | `helix audit verify`, step 2 | Its bind and environment differ from 3.7 step 2 (O16) |
+Withdrawn (standalone decision): file 01's bridge functions for the chain, which opened a segment, read a head and ran Meridian's verify command. `ChainWriter` creates each segment file itself (3.3 step 8) and reads the head itself (step 4), and `helix audit verify` checks segments in process (3.7). What this file still needs from file 01 is the durable state root. `[LLD]`
 
 **B2: the chain on the pilot host** `[LLD]`, following 01 §3.5.5 and §3.8:
 
 1. Both control jobs (`control-pre`, `control-post`) run as containers on the always-on pilot host with `{state_root}/{client_id}` mounted read-write from its local block storage. So both jobs, and every later run of the ticket, see one state directory. The agent job mounts none of it and writes no chain.
-2. No segment file, `meridian.db` or token cache travels in a workflow artefact. The `run-pre` and `run-agent` artefacts hold the run directory only (01 §3.8); the state directory is mounted, never copied.
-3. A control job bound to the wrong state directory cannot continue a chain. `bind_control` refuses a root without the RUNBOOK's `.helix-state-root` marker (01 §3.5.5, 01 G31). `ChainWriter.open` step 2 refuses a directory that lacks a segment the store records, with `AuditIndexMismatch` (G32).
+2. No segment file travels in a workflow artefact. The `run-pre` and `run-agent` artefacts hold the run directory only (01 §3.8); the state directory is mounted, never copied.
+3. A control job started on the wrong state directory cannot continue a chain. 01's state-root check refuses a root without the RUNBOOK's `.helix-state-root` marker (01 §3.5.5). `ChainWriter.open` step 2 refuses a directory that lacks a segment the store records, with `AuditIndexMismatch` (G32).
 4. `helix audit verify` runs on the pilot host against the mounted directory, or anywhere against a copy of it (3.7).
-5. If the owner rejects self-hosted runners, 01's fallback carries the run's segment files and `meridian.db` between the control jobs as an artefact, never the token cache (01 §3.5.5). `open` step 2 then checks the restored files against the store rows, so a missing or older carry raises `AuditIndexMismatch` (G32). Under that fallback no mount holds the chain between jobs, so a real ticket needs the owner's approval of the fallback, and the artefact's retention must outlast the run `[VERIFY]` (O14).
+5. If the owner rejects self-hosted runners, 01's fallback carries the run's segment files between the control jobs as an artefact (01 §3.5.5). `open` step 2 then checks the restored files against the store rows, so a missing or older carry raises `AuditIndexMismatch` (G32). Under that fallback no mount holds the chain between jobs, so a real ticket needs the owner's approval of the fallback, and the artefact's retention must outlast the run `[VERIFY]` (O14).
 
 #### 3.3.2 Deduplication by `event_key`
 
@@ -200,6 +206,7 @@ File 08 retries control activities (up to 5 attempts under policy T, 08 §3.6). 
 | Step | `{run_id}/s{step_seq:05d}/audit.{event}/{ordinal}` | Events an activity produces itself. `{run_id}/s{step_seq:05d}` is the prefix of file 08's write key (08 §3.12), `step_seq` from 08's state (also under the driver, 08 §3.16). Under `helix run` (B2), `step_seq` is one more than the highest `step_seq` in the run's `audit_event_key` rows when the step starts, kept in `run_state.v1.steps[].step_seq` so a resumed step reuses it (01 §3.9). `ordinal` counts events of that type in the step, from 1 |
 | Row | `{run_id}/row/{table}/{row_id}/{event}` | Events that record a store row written by a shared service, whichever activity chains it first: `credential_issued` (`credential_lease`, `row_id` = `{lease_id}.{content}`), `lease_closed` (`credential_lease`, `row_id` = `lease_id`), and facts relayed from `gateway_session`, `meter_event` and `ticket_event` rows. A new row is a new fact: a retried `open_phase_attempt` that revokes the open lease and gets another (08 §3.4) chains both leases and conflicts with nothing |
 | Measure | `{run_id}/measure/{gate or run}/{name}/{digest12}` | Events from `helix meter measure` (3.13), which is not a workflow step. `digest12` is the first 12 hex characters of a SHA-256. For `measurement_recorded`, `name` is the metric and the digest is the event's `data_sha256` (below), over the value, `recorded_by`, `changed_at` and `refused` together: the same facts never repeat, and every new change of the field gets a new key, such as the signer entering the number a wrong account had entered. For its `comment_posted` events, `name` is `comment.{purpose}` and the digest is of the comment's write key (3.13) |
+| Segment | `{run_id}/seg/{NNNN}/sealed` | The `segment_sealed` record that `ChainWriter.seal()` writes as the last record of segment `NNNN` (3.3) |
 
 Example: `acme.ACME-123/s00042/audit.phase_ended/1`.
 
@@ -210,11 +217,11 @@ Example: `acme.ACME-123/s00042/audit.phase_ended/1`.
 1. Steps 1–5 of `open` (lock, index checks, verify segment `k`, backfill).
 2. For each event, in order: compute `data_sha256`. If its key has a row with the same `data_sha256`, skip it and return the stored `event_id`. If the row's `data_sha256` differs, raise `AuditEventKeyConflict` (non-retryable: the activity ends `FAILED`). Two events with one key in the same batch raise the same error.
 3. If nothing is left, release the lock and return: no empty segment is written.
-4. Otherwise steps 6–8 of `open`; then for each event, `RunLog.note()` (the file write and its `fsync`), then insert its `audit_event_key` row; then `seal()`.
+4. Otherwise steps 6–8 of `open`; then for each event, append its record (the file write and its `fsync`, 3.2), copy it (3.3), then insert its `audit_event_key` row; then `seal()`.
 
 An activity that anchors calls `record` twice (3.6). Between the calls it reads the head of the segment holding the first call's events (`audit_event_key.segment_id`, then `audit_segment.head_hash`), so a retry whose first call was skipped finds the same head. `open` and `seal` are the internal halves of `record`; no activity calls them directly.
 
-**The crash window.** A process can die after `note()` wrote a record and before its key row was inserted. Backfill (step 5 of `open`) closes it: for every `audit_event.v1` record in segment `k` whose `event_key` has no row, insert the row from the record (`segment_id`, `record_index`, `event_id`, `event`, `data_sha256`). A key that already has a row pointing at another record means the key was written twice: `AuditIndexMismatch`. The retried activity then skips the event as in step 2.
+**The crash window.** A process can die after a record was appended and before its key row was inserted. Backfill (step 5 of `open`) closes it: for every `audit_event.v1` record in segment `k` whose `event_key` has no row, insert the row from the record (`segment_id`, `record_index`, `event_id`, `event`, `data_sha256`). A key that already has a row pointing at another record means the key was written twice: `AuditIndexMismatch`. The retried activity then skips the event as in step 2.
 
 An event's `data` holds only values read from deterministic inputs (store rows, files and their digests, external results matched by 08's write keys). `event_id` and `occurred_at` sit outside `data`, so a retry that mints a new `event_id` still matches. `[LLD]`
 
@@ -225,18 +232,18 @@ An event's `data` holds only values read from deterministic inputs (store rows, 
 | `credential_issued` | `lease_id`, `fingerprint`, `issued_at`, `expires_at` | Row form keyed by the lease (above): each lease is its own fact |
 | `phase_started` | `caps` (the remaining amounts at issuance) | Issuance stores them on the attempt's `meter_balance` row as `issued_with`, and a retry reuses that row (3.11, 3.15). Other runs' spend after issuance does not change them |
 | `phase_ended` | `usage.reservations_released_usd`; `duration_s` | The released amount is stored once on the attempt row as `released_usd` (3.11); a retry reads it and releases nothing more. `duration_s` is `phase_result.v1`'s `ended_at − started_at`, never the clock at close |
-| `gate_approved`, `gate_rejected`, `signal_refused` | `gate_approval_id` | Derived, never drawn: UUID v5, in a fixed the Helix namespace, of `{client_id}/{source_event_id}/{gate}`, which is the `gate_approval` row's unique key (08 §3.9.3). A retry that crashed after the chain record and before the row rebuilds the same id (O3) |
+| `gate_approved`, `gate_rejected`, `signal_refused` | `gate_approval_id` | Derived, never drawn: UUID v5, in a fixed Helix namespace, of `{client_id}/{source_event_id}/{gate}`, which is the `gate_approval` row's unique key (08 §3.9.3). A retry that crashed after the chain record and before the row rebuilds the same id (O3) |
 | `cap_changed` | `old_cap_usd`, `stop_cleared` | Chained before the change is committed (3.11, issuance steps 2 and 3), so a retry computes the same change and skips it by key |
 | Any | A value read fresh from the profile, Jira or GitHub that changed between two tries (a profile edit, or two faults in one step) | `AuditEventKeyConflict`: the activity ends `FAILED` for an operator. The chain never holds two different facts under one key |
 
 ### 3.4 `audit_event.v1`
 
-One Helix event = one `RunLog.note()` record. The record as written to the file has two kinds of key:
+One Helix event = one line of a segment file. The record as written has two kinds of key:
 
 | Kind | Keys | Who sets them |
 | --- | --- | --- |
-| RunLog-owned (reserved) | `type` = `"note"`, `run_id` = the segment id, `message`, `ts`, `prev`, `hash` | `RunLog` (`message` is a short helix-written line such as `phase_ended build 2 DONE`, never requester text) |
-| Helix-owned | Every field in the next table | `helix.audit.events`, validated against `schemas/audit_event.v1.json` before `note()` is called |
+| Chain-owned (reserved) | `seq`, `prev_hash`, `hash` (3.2) | `ChainWriter`, at the append |
+| Event fields | Every field in the next table | `helix.audit.events`, validated against `schemas/audit_event.v1.json` before the append |
 
 **Common fields** `[LLD]`
 
@@ -245,12 +252,12 @@ One Helix event = one `RunLog.note()` record. The record as written to the file 
 | `schema` | string | const `audit_event.v1` |
 | `event` | string | one of the event types below |
 | `event_id` | string | UUID v4 |
-| `event_key` | string | required; at most 200 characters; one of the three forms in 3.3.2, for example `acme.ACME-123/s00042/audit.phase_ended/1`; unique per run (table `audit_event_key`) |
+| `event_key` | string | required; at most 200 characters; one of the four forms in 3.3.2, for example `acme.ACME-123/s00042/audit.phase_ended/1`; unique per run (table `audit_event_key`) |
 | `helix_run_id` | string | 00 §6 `run_id` |
 | `client_id` | string | 00 §6 |
 | `ticket_key` | string | 00 §6 |
 | `phase_attempt_id` | string or null | 00 §6; null for events outside an attempt |
-| `occurred_at` | string | RFC 3339 UTC: when the fact happened. RunLog's `ts` is when it was written |
+| `occurred_at` | string | RFC 3339 UTC: when the fact happened. No write time is kept per record; the header's `opened_at` and the seal record's `occurred_at` bound it |
 | `actor` | object | `{kind: control_plane \| human \| gateway \| broker \| sandbox_runner, component: string, account_id: string?}`; `account_id` is a Jira account id or GitHub login, never a display name or email |
 | `provenance` | object or null | required on `phase_started`, `phase_ended`, `tool_call_summary`, `gate_approved`, `gate_rejected`, `pr_opened`, `cap_stop` |
 | `data` | object | per event type; at most 16 KiB serialized; the overflow rule below applies. Every event type's schema also allows `truncated` (boolean) and the `{name}_total` and `{name}_sha256` fields the rule adds |
@@ -275,7 +282,7 @@ One Helix event = one `RunLog.note()` record. The record as written to the file 
 | `prompt_hash` | string or null | 64 hex; definition below | |
 | `agent_definition_hash` | string or null | 64 hex; definition below | |
 | `reviewer` | object or null | `{system: jira \| github, account_id}`; set on gate events | `{"system":"jira","account_id":"acme-architect-01"}` |
-| `helix_version`, `meridian_version` | string | package versions | `0.1.0`, `1.8.1` |
+| `helix_version` | string | Helix's package version | `0.1.0` |
 
 Hash definitions. Introduced and owned here as shared identifiers. Files 04 and 05 already use them with these definitions (04 `phase_brief.v1.agent`, `phase_result.v1.agent`, `agent_definition.v1` and §3.8 *Digests*; 05 `produced_by`). Two other digests are **not** these and must not be put in their place: the `prompt_sha256` and `agent_definition_sha256` of files 06 and 07 (07's `prompt_sha256` covers "system prompt plus first user message"), which must become these names with these inputs (O4); and the gateway's SHA-256 of `system`, which is `request_system_sha256` (3.9), not `prompt_hash` (O15). File 04 proposes adding `POLICY_VERSION`, the SDK version and the CLI version to `agent_definition_hash` (04 §3.8). This file keeps the hash over files only, so it stays stable per the Helix version and phase, and chains those three values beside it in `phase_ended.launch` (O9). `[LLD]`
 
@@ -292,7 +299,7 @@ The plan names no event types. It requires that the chain carry "the provenance 
 | --- | --- | --- | --- |
 | `workflow_started` | `audit_record`, as the first step of every execution, driver run or `helix run` | `reason` (08's `created` \| `reopened` \| `continued` \| `cutover` \| `late_event`), `driver` (`action` \| `controlplane` \| `temporal`), `measurement_cohort` (`pre_b5` \| `b5`, 08 §3.16), `temporal_workflow_id`, `temporal_run_id` (null outside Temporal), `profile_digest` | `[LLD]` |
 | `phase_started` | `open_phase_attempt` | `phase`, `attempt` (int ≥ 1), `brief {path, sha256}`, `inputs [{path, sha256}]` (from the brief), `caps {attempt_usd, run_remaining_usd, day_remaining_usd, month_remaining_usd}` (the attempt row's `cap_usd` and `issued_with`, 3.11; `day_remaining_usd` null when no daily cap is set), `image_digest` | `[LLD]` |
-| `credential_issued` | `open_phase_attempt`, one per entry of the lease's `contents[]` (row form of `event_key`); `run_discover` for its `meridian_env` handout and `run_design_validate` for its `ruleset` bearer (step form: a handout has no lease row) | `credential_kind`: 03's lease contents (`model_session` \| `maven_access` \| `anypoint_bearer`, 03 §3.6.2), or `meridian_env` (03 `POST /v1/meridian-env`: the discover app's pair for a credentialed Meridian child), or `ruleset_bearer` (03 `POST /v1/bearer`, purpose `ruleset`); `issuer` (`broker`: every credential is minted inside a broker lease or handout, 03 §3.6.2); `lease_id` (null for a handout); `issued_to {class: agent_sandbox \| egress_guard \| control_plane, phase_attempt_id}` (`maven_access` goes to the attempt's egress guard, never into the sandbox's environment, 03 §3.6.2); `scope` (`{models[], usd_cap}`, `{app_key, grants[]}` or `{path_prefix}` for `maven_access`); `issued_at`; `expires_at`; `fingerprint` (the broker's `fingerprints` entry: first 16 hex characters of the credential's SHA-256; never the value) | `[LLD]`, `[HLD-P#1]` `[HLD-P#2]` scope |
+| `credential_issued` | `open_phase_attempt`, one per entry of the lease's `contents[]` (row form of `event_key`); `run_design_validate` for its `ruleset` bearer (step form: a handout has no lease row). Withdrawn (standalone decision): the handout of the discover app's pair to a credentialed Meridian child process. The record for a credential handed to `run_discover` or to an optional `EstateProvider` is To design (O22) | `credential_kind`: 03's lease contents (`model_session` \| `maven_access` \| `anypoint_bearer`, 03 §3.6.2), or `ruleset_bearer` (03 `POST /v1/bearer`, purpose `ruleset`); `issuer` (`broker`: every credential is minted inside a broker lease or handout, 03 §3.6.2); `lease_id` (null for a handout); `issued_to {class: agent_sandbox \| egress_guard \| control_plane, phase_attempt_id}` (`maven_access` goes to the attempt's egress guard, never into the sandbox's environment, 03 §3.6.2); `scope` (`{models[], usd_cap}`, `{app_key, grants[]}` or `{path_prefix}` for `maven_access`); `issued_at`; `expires_at`; `fingerprint` (the broker's `fingerprints` entry: first 16 hex characters of the credential's SHA-256; never the value) | `[LLD]`, `[HLD-P#1]` `[HLD-P#2]` scope |
 | `lease_closed` | `close_phase_attempt` after it revokes the lease; for a lease revoked elsewhere (a retried `open_phase_attempt`, an operator, expiry), the run's next control activity (row form) | `lease_id`, `container_class`, `contents []`, `redeemer` (03's `{kind: mtls, subject}` or `{kind: github_oidc, repository, gh_run_id, job}`), `redeemed_at` (null when never redeemed), `revoked_at` (null when it expired unrevoked), `expires_at`. 03 §3.6.3 audits issue, redeem and revoke: issue is `credential_issued`, the other two are this record | `[LLD]`, `[HLD-P#1]` |
 | `tool_call_summary` | `close_phase_attempt` | `tool_log {path, sha256}` (04's tool log), `calls_total`, `by_tool {name: {allowed, denied}}`, `denied [{tool, rule_id, args_sha256}]` (a hook *ask* appears here as a deny `[HLD-P#16]`), `bash_classes {mvn_package, mvn_test, other}`, `mcp_calls {"server.tool": n}`, `files_written`, `source: "sandbox_runner"`. Tool arguments are kept out of the chain and bound by digest; the overflow rule above caps the lists and maps | `[LLD]` |
 | `security_refusal` | `close_phase_attempt` for refusals inside the sandbox (read from the tool log and `phase_result.v1.findings`); `audit_record` for a control-plane component's refusal within a run | `code` (the refusal's code as its owner defines it, 10 §4: 04's findings such as `POLICY_STOP`, `CREDENTIAL_IN_TRANSCRIPT`, `CREDENTIAL_IN_OUTPUT`; 07's `SECRET_FOUND`, `TREE_CI_FILE`; 03's outbound-scan and push refusals), `rule_id` (the rule id when there is one, for example 04's `R-EGR-01`, `R-SEC-01`, `R-ASK-01`, `R-LIM-01`; else null), `component` (`runner_preflight` \| `pretooluse_hook` \| `permission_request` \| `egress` \| `transcript_scan` \| `secret_scanner` \| `outbound_scan` \| `git_writer` \| `gateway` \| `doctor`), `target_sha256` (SHA-256 of what was refused: path, command, host or artefact; never the value), `phase_attempt_id` (null outside an attempt). A refusal with no run (a webhook signature or replay refused before routing) has no chain and stays in 03's log. A refused gate signal is written once, as `signal_refused`. A hook deny that does not stop the session is in `tool_call_summary.denied` only (10 §4) | `[LLD]` (10 §3.5 rule 5) |
@@ -309,31 +316,32 @@ The plan names no event types. It requires that the chain carry "the provenance 
 | `transition_made` | `apply_effects`; 05's `intake-apply` | `from_state`, `to_state` (00 §6 logical states), `jira_transition_id` | `[LLD]` |
 | `comment_posted` | `apply_effects`; gate activities; 05's `intake-apply`; `helix meter measure` | `purpose` (`question_set` \| `gate_open` \| `gate_ack` \| `intake_notice` \| `cap_stop` \| `error` \| `off_path` \| `measurement_request` \| `measurement_missing` \| `minutes_refused` \| `pr_link`), `delivery` (`public` \| `restricted` \| `draft_hold`, 05 §3.15; `public` when the writer sets none), `jira_comment_id` (null for `draft_hold`), `body_sha256`, `body_chars`, `anchor_head` (when the comment carries an anchor) | `[LLD]` |
 | `draft_released` | 08's `release_draft`, through 03's `release_held` (03 §3.5.5) | `hold_id`, `reason` (03's `own_names` \| `estate_shape` \| `draft_all`), `held_comment_sha256` (03's `rendering_sha256`), `released_by {system, account_id}`, `released_at`, `posted_comment_id` (03's `public_comment_id`), from 03's `outbound_hold` row | `[LLD]` (03 §3.5.5, 05 §3.15) |
-| `discover_source` | 05's `helix discover`, in `run_discover` | `source`, `status`, `required`, `exit_code`, `reason` (a code), `raw_sha256`, `duration_s` | `[LLD]` (05 §3.15) |
+| `discover_source` | 05's `helix discover`, in `run_discover` | `source`, `status` (05's values; an estate source with no `EstateProvider` configured is `not_checked`), `required`, `exit_code`, `reason` (a code), `raw_sha256`, `duration_s` | `[LLD]` (05 §3.15) |
 | `ledger_answer` | 05's `intake-apply` | `fact_id`, `answer_id` (or null), `source_kind`, `author_class`, `value_sha256`, `stated_at`, `admitted` (boolean), `reason_code` (or null) | `[LLD]` (05 §3.15) |
 | `ledger_contradiction` | 05's `intake-apply` | `fact_id`, `earlier_answer_id`, `later_answer_id`, `status_after` | `[LLD]` (05 §3.15) |
 | `intake_output_rejected` | 05's `intake-apply` | `output` (`fact_sheet` \| `question_set` \| `rejection_context`), `error_codes []`, `output_sha256` | `[LLD]` (05 §3.15) |
 | `head_verified` | `apply_effects`, after `run_verify_head` (08 §3.8 `pr_reverify`); in the pilot, the post job of 07 §3.8.7 | `verify_attempt_id` (08's `{run_id}.verify.{n}`), `head_sha`, `tree_sha`, `verdict` (`pass` \| `fail`), `reports [{path, sha256}]`, `posted` (`success` \| `failure` \| `none`), `reason` (null, or `VERIFY_HEAD_MISMATCH` when the head moved and nothing was posted) | `[LLD]`, `[HLD-P#8]` |
-| `profile_keys_appended` | `run_pr --mode record-merge`, through 02's `profile.deployment_keys.append` (02 §3.10, edit rule 7) | `file` (`tenant.yaml`), `added [key name]`, `skipped` (count), `old_sha256`, `new_sha256` | `[LLD]` |
+| `profile_keys_appended` | Withdrawn (standalone decision): deployment property keys are declared in the design bundle only (`deployment_property_keys[]`, 07 §3.4.4) and nothing is written to the profile at merge, so no step writes this event | — | Standalone architecture decision |
 | `pr_opened` | `run_pr` | `repo` (`owner/name`), `number`, `draft`, `head_sha`, `base`, `body_sha256` | `[LLD]` |
 | `pr_merged` | `verify_gate_decision` (gate 3, 08's `on_merge`) | `repo`, `number`, `merged_by`, `author`, `merged_at`, `merge_sha` | `[LLD]` |
 | `pr_closed` | `audit_record`, on 08's `pr_closed` signal (03 §3.4.6) | `repo`, `number`, `closed_by`, `closed_at`, `head_sha` | `[LLD]` |
 | `anchor_written` | gate activities (`intake-apply` for gate 1, `apply_effects`, `verify_gate_decision`), `run_close` | `anchored_segment_id`, `head`, `records`, `targets [{where: jira_comment \| pr_body, ref}]`, `failed_targets [{where, error}]` | `[HLD-P lower]` |
 | `measurement_recorded` | `helix meter measure` (3.13) | `metric`, `gate?`, `value`, `source` (3.13), `recorded_by` (the Jira account id that set the field, or `control_plane`), `changed_at` (the changelog time of the field's latest change; null for a value the control plane derived), `refused` (null \| `MINUTES_INVALID` \| `MINUTES_WRONG_ACTOR`) | `[HLD-P#18]` |
 | `run_closed` | `run_close` | `final_outcome`, `reason`, `totals {usd, tokens}`, `metrics` (3.12) | `[LLD]` |
+| `segment_sealed` | `ChainWriter.seal()`, as the last record of every sealed segment (segment form of `event_key`, 3.3.2) | `segment_id`, `records` (the records in the segment, this one included), `counts {event: n}` (events by type in the segment) | `[LLD]` (O23) |
 
 File 08 now uses these names (08 §3.9.3, open item 3), in place of its earlier `phase_attempt_opened`, `phase_attempt_closed`, `gate_decision` and `workflow_ended`. Two things that look like chain records are not: the bot-only-approval proof (07 §3.8.8, P4) runs in `helix doctor` outside any run, so it has no chain and belongs in 02's `onboarding_evidence` and `bot_approval_proof` (O4); and a profile edit made outside a run is 02's own record, not this chain's.
 
-**Redaction before hashing** `[LLD]`. Before `note()`, `helix.audit.events.redact()` replaces with `"<redacted>"`:
-- any value whose key, lower-cased and stripped, is in Helix's secret-key set (`authorization`, `api_key`, `apikey`, `bearer`, `x-api-key`, `password`, `secret`, `client_secret`, `clientsecret`, `consumersecret`, `consumer_secret`, `token`, `access_token`, `refresh_token`), modelled on Meridian's action-log rule (`SECRET_KEYS | _EXTRA_SECRET_KEYS`, `db/repositories/actions.py:39-40` and `54-68`, `estate/client_inventory.py:74-76`) but kept in Helix so the Meridian surface does not grow. It must run here, because Meridian's copy stores a run-log record as written and redacts nothing (3.2). A contract test (G18) asserts that Helix's set is a superset of Meridian's union in the pinned wheel;
+**Redaction before hashing** `[LLD]`. Before the append, `helix.audit.events.redact()` replaces with `"<redacted>"`:
+- any value whose key, lower-cased and stripped, is in Helix's secret-key set (`authorization`, `api_key`, `apikey`, `bearer`, `x-api-key`, `password`, `secret`, `client_secret`, `clientsecret`, `consumersecret`, `consumer_secret`, `token`, `access_token`, `refresh_token`), which `helix.audit.events` owns. It must run here, because the copy holds each record as written and redacts nothing (3.3). A contract test (G18) pins the set;
 - any string matching the secret patterns of file 07's pre-commit scanner.
 
-Fields named `*_sha256`, `*_hash`, `head` and `fingerprint` are exempt when they are exactly 16 or 64 lowercase hex characters. The redacted pointers go in `redactions`, so the hash covers what the file holds, as Meridian's copy does.
+Fields named `*_sha256`, `*_hash`, `head` and `fingerprint` are exempt when they are exactly 16 or 64 lowercase hex characters. The redacted pointers go in `redactions`, so the hash covers what the file holds, and the copy holds the same bytes.
 
 **Example**: one `phase_ended` record as written, wrapped here for reading (on disk it is one line):
 
 ```json
-{"actor":{"component":"close_phase_attempt","kind":"control_plane"},"helix_run_id":"acme.ACME-123","client_id":"acme",
+{"actor":{"component":"close_phase_attempt","kind":"control_plane"},"client_id":"acme",
 "data":{"attempt":2,"duration_s":1843.2,"exit_code":0,"findings_count":0,
 "launch":{"cli_version":"2.1.242","env_names":["ANTHROPIC_AUTH_TOKEN","ANTHROPIC_BASE_URL","HELIX_PHASE","HELIX_PHASE_ATTEMPT_ID",
 "HELIX_RUN_ID","CLAUDE_CODE_PROMPT_CACHE_TTL","HOME","LANG","MAVEN_SETTINGS","PATH","TMPDIR"],
@@ -344,16 +352,15 @@ Fields named `*_sha256`, `*_hash`, `head` and `fingerprint` are exempt when they
 "usage":{"cache_read_tokens":1840211,"cache_write_tokens":96420,"calls":61,"input_tokens":20514,
 "output_tokens":48122,"reservations_released_usd":"0.000000","usage_unreadable_calls":0,"usd":"12.104380"},"usage_disagrees":false},
 "event":"phase_ended","event_id":"7c1e0a52-3f7e-4f0e-9d33-0f6a4e1c2b90","event_key":"acme.ACME-123/s00042/audit.phase_ended/1",
-"hash":"a3f1...c09e","message":"phase_ended build 2 DONE","occurred_at":"2026-11-03T10:41:07Z",
-"phase_attempt_id":"acme.ACME-123.build.2","prev":"1b4f0e9851971998e732078544c96b36c3d01cedf7caa332359d6f1d83567014",
-"provenance":{"agent_definition_hash":"e3b0c442...b855","helix_version":"0.1.0","meridian_version":"1.8.1",
+"hash":"a3f1...c09e","helix_run_id":"acme.ACME-123","occurred_at":"2026-11-03T10:41:07Z",
+"phase_attempt_id":"acme.ACME-123.build.2","prev_hash":"1b4f0e9851971998e732078544c96b36c3d01cedf7caa332359d6f1d83567014",
+"provenance":{"agent_definition_hash":"e3b0c442...b855","helix_version":"0.1.0",
 "model":"claude-opus-5-5","prompt_hash":"2c26b46b...e7ae","provider":"bedrock","region":"eu-west-1",
 "reviewer":null,"route_model_id":"anthropic.claude-opus-5-5","ticket_key":"ACME-123"},"redactions":[],
-"run_id":"acme.ACME-123.s0012","schema":"audit_event.v1","ticket_key":"ACME-123",
-"ts":"2026-11-03T10:41:09.512000+00:00","type":"note"}
+"schema":"audit_event.v1","seq":131,"ticket_key":"ACME-123"}
 ```
 
-Keys are in sorted order because `RunLog` writes with `sort_keys=True`; `ts` has the shape `datetime.isoformat()` gives. Hashes shortened with `...` are abbreviated for reading. Token counts, dollar figures and versions are fixture values, not measurements; they are not priced with the `acme-fixture-1` table of 3.9, so no test derives one from the other.
+Keys are in sorted order because every line is canonical JSON (3.2). This record is line 5 of `acme.ACME-123.s0012.jsonl`, record index 4. Hashes shortened with `...` are abbreviated for reading. Token counts, dollar figures and versions are fixture values, not measurements; they are not priced with the `acme-fixture-1` table of 3.9, so no test derives one from the other.
 
 ### 3.5 Writing sequence around an agent phase
 
@@ -369,7 +376,7 @@ sequenceDiagram
   participant LA as Agent launcher (08)
   participant SB as Sandbox
   participant CL as close_phase_attempt (control)
-  participant CH as Chain (segments + action_log copy)
+  participant CH as Chain (segments + copy)
   WF->>OP: phase_attempt_id
   OP->>ST: issuance step 2 (3.11): read caps against the profile, no write
   OP->>CH: record: cap_changed? (before the change commits)
@@ -440,26 +447,28 @@ A gate is not opened until its comment posts, because the gate comment carries t
 
 ### 3.7 `helix audit verify`
 
-Wraps `meridian runs --verify` (00 §4) `[PLAN]`, through file 01's `meridian_bridge.runs_verify(chain_file=...)`. It runs anywhere that has (a) write access to the client's state directory, or to a copy of it (a restored backup), because Meridian opens `meridian.db` in WAL mode and SQLite creates side files beside it (3.3), and (b) Helix store through the read-only role `helix_audit_reader`. `--check-anchors` runs only in the control plane, because it reads Jira and GitHub. `[LLD]`
+Verifies a run's chain in process (Standalone architecture decision): it reads the run's segment files in order, recomputes every hash itself, and starts no subprocess and no other tool's CLI. It runs anywhere that has (a) read access to the client's audit directory, or to a copy of it such as a restored backup, and (b) the Helix store through the read-only role `helix_audit_reader`. `--check-anchors` runs only in the control plane, because it reads Jira and GitHub. `[LLD]`
 
-**Role `helix_audit_reader`** `[LLD]`: a PostgreSQL role with `SELECT` only on `audit_segment`, `audit_event_key` and `gate_approval`, under each table's row-level security per client (00 §7). It holds no other grant, so verify cannot change the store.
+Withdrawn (standalone decision): the wrapper around Meridian's verify command, the subprocess it ran for each segment with its own environment and working directory, and the need for write access to the state directory.
+
+**Role `helix_audit_reader`** `[LLD]`: a PostgreSQL role with `SELECT` only on `audit_segment`, `audit_event_key` and `gate_approval`, under each table's row-level security per client (00 §7), and on the copy's table if O19 puts the copy in the Helix store. It holds no other grant, so verify cannot change the store.
 
 | Flag | Meaning |
 | --- | --- |
 | `--run RUN_ID` | Required; 00 §6 `run_id`. Gives `client_id` (the part before the first `.`) |
 | `--profile DIR` | Optional; the default is `$HELIX_PROFILES_ROOT/{client_id}`; used only for the Jira and GitHub identities of `--check-anchors` |
-| `--meridian-home DIR` | Optional; the state directory to check. The default is `$HELIX_STATE_ROOT/{client_id}/meridian/`, on the pilot host in B2 and on the control-plane host from B3 (3.3); any other directory is a copy, such as a restored backup |
+| `--audit-dir DIR` | Optional; the audit directory to check. The default is `$HELIX_STATE_ROOT/{client_id}/audit/`, on the pilot host in B2 and on the control-plane host from B3 (3.3); any other directory is a copy, such as a restored backup |
 | `--check-anchors` | Also fetch the bot's comments on the ticket and the PR body, and compare every anchor line |
 | `--out FILE` | Write `audit_verify.v1` JSON there; a text summary always goes to stdout |
 
 **Algorithm**
 
-1. List segments from `{MERIDIAN_HOME}/runs/{run_id}.s*.jsonl` and from `audit_segment`. If neither has any, stop: error, exit 2. If the store cannot be reached, go on with the files and report `STORE_UNAVAILABLE`; steps 5 and 7 are then not run.
-2. For each segment in order, run `meridian runs --verify {absolute path}` as a subprocess. Its environment is exactly `MERIDIAN_HOME` (the `--meridian-home` directory), `PATH`, `HOME` (an empty scratch directory, as 01 §3.5.2 sets it) and `LANG`, plus `MERIDIAN_DATABASE_URL` only if the fallback of 3.3 rule 4 is in use. No profile export, no `MERIDIAN_ACTOR` (verify writes nothing) and no Anypoint variable, because verification is offline and runs outside the control plane (00 §9 confines the profile exports to the control plane; O1) `[LLD]`. 01 §3.5.2's `runs --verify` column also sets the profile paths, the guard switches and `MERIDIAN_ACTOR`, so that no stored `setting` row in `meridian.db` changes behaviour. None can change this command: its verify path reads only the segment file and `action_log` (`cli.py:2659-2681`), and the database location and the home are env-only settings (`DATABASE_URL`, `HOME`, `settings.py:159-161`). 01's bridge is asked to build this environment for `runs_verify`, with no profile bind (O16). Its working directory is an empty temporary directory, never the profile directory, because Meridian loads `.env` from the working directory at import (`settings.py:388-417`, as 08 §3.14 notes). Parse stdout as JSON. Exit 2, exit 3 or JSON that does not parse means an error for that segment.
-3. Map Meridian's `broken_at` to `{segment_id, record_index, event_id}`. The `event_id` is read from that line when it parses.
-4. Check the links. Segment numbers run 1..k with no gap except numbers whose row is `abandoned`. Each `prev_segment_id` names the previous segment that has a file, and each `prev_segment_head` equals that segment's last `hash`. Every segment except the last ends in `run_end`; a missing `run_end` is reported as `SEGMENT_UNSEALED`, for information.
+1. List segments from `{audit directory}/{run_id}.s*.jsonl` and from `audit_segment`. If neither has any, stop: error, exit 2. If the store cannot be reached, go on with the files and report `STORE_UNAVAILABLE`; steps 5 and 7 are then not run.
+2. For each segment in order, call `verify_segment` (3.2) in process. It recomputes each record's `hash` from its `prev_hash` and the canonical JSON of the record without `hash`, and checks each `prev_hash` and `seq` against the record before. Its reasons include "record content does not match its hash" and "prev hash does not match the preceding record". The first line must be an `audit_segment_header.v1` record and every other line an `audit_event.v1` record. A segment file that exists but cannot be read is an error for that segment.
+3. Report the first break as `{segment_id, record_index, seq, event_id}`, where `record_index` is the 0-based index `verify_segment` returned. The `event_id` is read from that line when it parses.
+4. Check the links. Segment numbers run 1..k with no gap except numbers whose row is `abandoned`. Each header's `prev_segment_id` names the previous segment that has a file. Its `prev_segment_head` and its `prev_hash` equal that segment's last `hash`, and its `seq` is that segment's last `seq` plus 1; the header of `s0001` has `seq` 1 and the genesis value (3.2). Every segment except the last ends in its seal record; a missing seal record is reported as `SEGMENT_UNSEALED`, for information.
 5. Check the store. Each sealed segment's last hash and record count equal `audit_segment.head_hash` and `records`. Each `audit_event_key` row names a record that exists at that `segment_id` and `record_index` with that `event_id` and `event_key`. A difference is `STORE_MISMATCH`.
-6. Classify the copy from Meridian's `action_log.state` and the segment's row:
+6. Classify the copy from its state (3.3) and the segment's row:
 
    | Copy state | `audit_segment` row | Code | Severity |
    | --- | --- | --- | --- |
@@ -476,22 +485,24 @@ Wraps `meridian runs --verify` (00 §4) `[PLAN]`, through file 01's `meridian_br
 7. Check the gate rows (`[HLD-P#7]`). For each `gate_approval` row of the run, find the chain record whose `data.gate_approval_id` equals its `approval_id`. The record's `event` must agree with the row (`gate_approved` for an accepted approve, `gate_rejected` for an accepted reject, `signal_refused` for a refusal); its digest (`approved_digest` or `decided_digest`) must equal `decided_digest`; `{approver.system}:{approver.account_id}` (or `actor` for a refusal) must equal `actor_id`; `decided_at` must be equal; and `chain_head` must equal the `head_hash` of the sealed segment holding the record (3.6). A row with no record, a record with no row, or any difference is `GATE_APPROVAL_MISMATCH`. The chain wins (08 §3.10).
 8. With `--check-anchors`, for every anchor found (Jira comments by the bot account, read as in 3.6, and PR body lines), the named segment must exist, be sealed, and have that head and that record count. Every `anchor_written` event must have its Jira target present.
 
-Reads never migrate: verify calls no writer, Meridian's `copy_verdict` does not migrate (`db/audit.py:36`), and the Helix store is only read. Opening the database in WAL mode creates side files but changes no row and no schema (3.3; G19). `[PLAN]`
+**Result.** The run's result is `{valid, records, broken_at, reason}`. `valid` is true only when every segment passed step 2 and every link passed step 4. `records` is the number of records read. `broken_at` is null, or step 3's object for the first break, and `reason` is that break's reason. These four fields lead `audit_verify.v1`; the findings of steps 5 to 8 follow them.
+
+Reads never migrate and never write: verify calls no writer, opens segment files read-only, and reads the Helix store through a `SELECT`-only role (G19). `[PLAN]`
 
 **Finding codes**
 
 | Code | Severity | Raised when |
 | --- | --- | --- |
-| `CHAIN_BROKEN` | finding | Meridian reports `valid: false`; carries `record_index` and `reason` |
-| `COPY_BROKEN`, `COPY_DIFFERS` | finding | Meridian's `action_log.state` is `broken` or `differs` |
+| `CHAIN_BROKEN` | finding | A segment's hash check reports `valid: false` (step 2); carries `record_index`, `seq` and `reason` |
+| `COPY_BROKEN`, `COPY_DIFFERS` | finding | The copy's state is `broken` or `differs` |
 | `COPY_LOST` | finding | Copy `absent`, but the segment row recorded copied records |
 | `COPY_TRUNCATED` | finding | Copy `incomplete` and shorter than the row's `mirrored` count: its tail was removed after seal |
-| `COPY_UNAVAILABLE` | finding when `mirrored > 0`; information when `mirrored` is 0 or null | Meridian's `unavailable` |
+| `COPY_UNAVAILABLE` | finding when `mirrored > 0`; information when `mirrored` is 0 or null | The copy's state is `unavailable` |
 | `COPY_INCOMPLETE`, `COPY_ABSENT` | information | The copy stopped at write time as the row records, or was never made; the file is the record |
 | `SEGMENT_MISSING` | finding | A gap in segment numbers, or a store row without its file, other than an `abandoned` row |
 | `SEGMENT_UNRECORDED` | finding | A file without its store row |
-| `SEGMENT_LINK_BROKEN` | finding | `prev_segment_head` does not match |
-| `SEGMENT_UNSEALED` | information | A segment that is not the last has no `run_end` |
+| `SEGMENT_LINK_BROKEN` | finding | A header's `prev_segment_head`, `prev_hash` or `seq` does not continue the previous segment |
+| `SEGMENT_UNSEALED` | information | A segment that is not the last has no seal record |
 | `STORE_MISMATCH` | finding | Head or record count differs from `audit_segment`, or an `audit_event_key` row names a record that is not there |
 | `STORE_UNAVAILABLE` | finding | Helix store could not be read, so steps 5 and 7 did not run |
 | `GATE_APPROVAL_MISMATCH` | finding | A `gate_approval` row and its chain record disagree, or one exists without the other (step 7) |
@@ -505,16 +516,17 @@ Reads never migrate: verify calls no writer, Meridian's `copy_verdict` does not 
 | --- | --- | --- |
 | `schema` | string | const `audit_verify.v1` |
 | `run_id`, `client_id` | string | |
-| `meridian_home` | string | the directory checked |
+| `audit_dir` | string | the directory checked |
 | `checked_at` | string | RFC 3339 UTC |
-| `meridian_version` | string | from `meridian --version` |
+| `helix_version` | string | the package version of the Helix that verified |
+| `valid`, `records`, `broken_at`, `reason` | boolean, integer, object or null, string or null | the run's result (above); `broken_at` is `{segment_id, record_index, seq, event_id}` |
 | `verdict` | string | `VALID` \| `FINDINGS` \| `ERROR` |
 | `segments[]` | array | `{segment_id, path, records, valid, broken_at, reason, sealed, head, link_ok, copy {state, records, reason?}, store {head_match, records_match, keys_match}}` |
 | `gate_rows` | object | `{status: OK \| FINDINGS \| INCOMPLETE, checked, mismatched}` |
 | `anchors` | object | `{status: OK \| FINDINGS \| INCOMPLETE \| NOT_REQUESTED, items [{where, ref, segment_id, head, match}]}` |
 | `findings[]` | array | `{code, severity, segment_id?, record_index?, event_id?, gate_approval_id?, reason}` |
 
-Exit codes (00 §5): **0** no finding (information lines allowed); **1** any finding, including a check that could not run (`STORE_UNAVAILABLE`, `ANCHORS_INCOMPLETE`, `COPY_UNAVAILABLE` where a copy was made); **2** error (no segments, state directory unreadable or not writable, Meridian exit 2 or 3, output that does not parse).
+Exit codes (00 §5): **0** valid, with no finding (information lines allowed); **1** broken, or any other finding, including a check that could not run (`STORE_UNAVAILABLE`, `ANCHORS_INCOMPLETE`, `COPY_UNAVAILABLE` where a copy was made); **2** unreadable: no segments, or the audit directory or a segment file cannot be read.
 
 ### 3.8 Threat model
 
@@ -522,18 +534,18 @@ Exit codes (00 §5): **0** no finding (information lines allowed); **1** any fin
 
 | Attack | Detected? | By |
 | --- | --- | --- |
-| Edit a field of record *i* and leave its `hash` | Yes, at record *i* | Meridian `RunLog.verify`: "record content does not match its hash" |
+| Edit a field of record *i* and leave its `hash` | Yes, at record *i* | The hash check (3.7 step 2): "record content does not match its hash" |
 | Edit record *i* and recompute its `hash` | Yes, at record *i+1* | "prev hash does not match the preceding record" |
-| Delete, insert or reorder records inside a segment | Yes, at the first record out of place | `RunLog.verify` |
+| Delete, insert or reorder records inside a segment | Yes, at the first record out of place | The hash check: each record's `prev_hash` and `seq` against the record before it |
 | Cut records from the end of a sealed segment | Yes | `STORE_MISMATCH` (count and head); the copy reads `differs` |
 | Cut records from the end of the last, unsealed segment | Through the copy and the key index | Copy `differs` if the copy holds more records than the file; `STORE_MISMATCH` if an `audit_event_key` row names a cut record; not detected if the file, the copy and the key rows are all cut |
 | Cut rows from the end of a segment's copy | Yes, when the seal recorded `mirrored` | `COPY_TRUNCATED` against `audit_segment.mirrored` |
 | Delete a middle segment | Yes | `SEGMENT_MISSING`, `SEGMENT_LINK_BROKEN` |
 | Delete the last segments | Yes, if anchored or indexed | `audit_segment` rows; anchors |
-| Rewrite every file, the Meridian copy and the Helix store consistently (the storage operator) | Only for history up to the last anchor | `ANCHOR_MISMATCH` against Jira and the PR body |
+| Rewrite every file, the copy and the Helix store consistently (the storage operator) | Only for history up to the last anchor | `ANCHOR_MISMATCH` against Jira and the PR body |
 | The above, plus editing the Jira comments and the PR body | No | Out of scope: needs the storage operator, a Jira admin and a repository writer acting together. Whether edits show in Jira and GitHub history is `[VERIFY]` |
 | A compromised control plane writes false events at write time | No | Out of scope: the control plane is trusted to write |
-| An agent writes to the chain | Prevented, not detected | No state-directory mount and no `MERIDIAN_HOME` in the sandbox (G6) |
+| An agent writes to the chain | Prevented, not detected | No mount under `$HELIX_STATE_ROOT` in the sandbox (G6) |
 
 Write-once storage for the state directory is an optional strengthening; signing stays deferred (plan §5). `[HLD-P lower]`
 
@@ -844,8 +856,8 @@ All carry `client_id` with row-level security (00 §7). The store never migrates
 
 | Table | Key | Columns (type, constraint) | Writers |
 | --- | --- | --- | --- |
-| `audit_segment` | `(client_id, run_id, segment_no)`; `segment_id` unique | `state text not null` (`open` \| `sealed` \| `abandoned`), `opened_at timestamptz not null`, `opened_by jsonb`, `prev_segment_head char(64) null`, `closed_at timestamptz null`, `head_hash char(64) null`, `records int null` (records in the file, `run_start` and `run_end` included), `mirrored int null`, `mirror_error text null`. A trigger refuses any change to a `sealed` or `abandoned` row | `ChainWriter` |
-| `audit_event_key` | `(client_id, run_id, event_key)` | `event_key text not null` (≤ 200 characters, 3.3.2), `segment_id text not null` (references `audit_segment.segment_id`), `record_index int not null ≥ 1` (0 is `run_start`), `event_id uuid not null`, `event text not null`, `data_sha256 char(64) not null`, `written_at timestamptz not null`. A trigger refuses UPDATE and DELETE | `ChainWriter` (on write and on backfill) |
+| `audit_segment` | `(client_id, run_id, segment_no)`; `segment_id` unique | `state text not null` (`open` \| `sealed` \| `abandoned`), `opened_at timestamptz not null`, `opened_by jsonb`, `prev_segment_head char(64) not null` (the genesis value of 3.2 for `s0001`), `closed_at timestamptz null`, `head_hash char(64) null`, `records int null` (records in the file, the header and the seal record included), `mirrored int null`, `mirror_error text null`. A trigger refuses any change to a `sealed` or `abandoned` row | `ChainWriter` |
+| `audit_event_key` | `(client_id, run_id, event_key)` | `event_key text not null` (≤ 200 characters, 3.3.2), `segment_id text not null` (references `audit_segment.segment_id`), `record_index int not null ≥ 1` (0 is the header), `event_id uuid not null`, `event text not null`, `data_sha256 char(64) not null`, `written_at timestamptz not null`. A trigger refuses UPDATE and DELETE | `ChainWriter` (on write and on backfill) |
 | `meter_event` | `meter_event_id` | every field of 3.9; `usd numeric(12,6)`, `reserve_usd numeric(12,6)`; `max_tokens`, `price_*` nullable only when `status = refused_kill_switch` (a CHECK); indexes `(client_id, started_at)`, `(run_id)`, `(phase_attempt_id)`. Grants: INSERT only, no UPDATE or DELETE | Gateway |
 | `meter_balance` | `(client_id, scope_kind, scope_key)`, `scope_kind ∈ {attempt, run, client_day, client_month}` | `cap_usd numeric(12,6) > 0`, `spent_usd numeric(12,6) ≥ 0`, `reserved_usd numeric(12,6) ≥ 0`, `stopped_at timestamptz null`, `stop_reason text null`, `issued_with jsonb null` (attempt rows only: `{run_remaining_usd, day_remaining_usd, month_remaining_usd}` at issuance, decimal strings; set once), `released_usd numeric(12,6) null` (attempt rows only: reservations released at close; set once), `updated_at timestamptz not null`. A CHECK keeps `issued_with` and `released_usd` null on other kinds, and a trigger refuses changing either once set. Invariant: `spent_usd` = Σ `meter_event.usd` in scope | `open_phase_attempt` (creates rows, applies cap changes, sets `issued_with`, 3.11); gateway (admission, settlement); `close_phase_attempt` (releases reservations, sets `released_usd`) |
 | `run_metrics` | `(client_id, run_id)` | the 3.12 values, `computed_at` | `run_close` |
@@ -884,7 +896,7 @@ File 02 owns `helix_profile.v1`; this file uses 02's names and types (02 §3.4).
 | --- | --- | --- |
 | `[HLD-P#1]` control plane and sandbox split | Only control-plane code writes the chain; `credential_issued` records broker leases | The plan's worker holds the connected-app secret and runs the agent. The chain is still written only by the Helix code outside the Agent SDK session, through `ChainWriter`; `credential_issued` records the worker's own exchange (`issuer` gains the value `worker`, `issued_to.class = control_plane`) and the lease fields are null. G6 holds against the agent's tool policy instead of a container mount list |
 | `[HLD-P#2]` model gateway | Per-call `meter_event`, admission and settlement, `request_system_sha256` | Spend comes from the SDK's `ResultMessage` per attempt (`total_cost_usd`, `usage`), written by `close_phase_attempt` into `phase_ended.usage`; there is no `meter_event` table and no per-call reserve. Caps apply at phase boundaries, as in plan §3.5, with the SDK's `max_budget_usd` as the only limit inside an attempt. The per-call parts of G9–G11, G13, G26, G27, G28 and G31 drop; provenance takes provider and region from the profile route |
-| `[HLD-P#6]` the control plane as a component before B5 (01's always-on pilot host) | The B2 state root on that host's local block storage, mounted into both control jobs (3.3, 3.3.1) | No always-on pilot host, so no mount holds the B2 chain between jobs. 01's artefact-carry fallback applies (3.3.1 item 5): each control job restores and uploads the segment files and `meridian.db`, a real ticket needs the owner's approval of it, and G32 checks the restored files against the store rows |
+| `[HLD-P#6]` the control plane as a component before B5 (01's always-on pilot host) | The B2 state root on that host's local block storage, mounted into both control jobs (3.3, 3.3.1) | No always-on pilot host, so no mount holds the B2 chain between jobs. 01's artefact-carry fallback applies (3.3.1 item 5): each control job restores and uploads the segment files, a real ticket needs the owner's approval of it, and G32 checks the restored files against the store rows |
 | `[HLD-P#7]` gate digests, approver lists, draft PR at B4 | `approved_digest`, `gate_approval_id`, verify step 7, `non_author` requires a listed gate 3 approver, `gate3_accepted` | Gate events carry no digest or row id; verify step 7 and `GATE_APPROVAL_MISMATCH` drop; `non_author` is only "`merged_by` is not the PR author" (plan §3.2), so `MERGED_BY_NON_APPROVER` drops; `gate3_accepted` rests on 07's `verify_on_merged_head` alone; gate 2's anchor goes only to Jira, because no draft PR exists before build. `approvals_invalidated` is not written |
 | `[HLD-P#8]` head re-verification before a merge counts | `head_verified`; an unverified head makes `gate3_accepted` false (08's `digest_mismatch`, 07's `verify_on_merged_head`) | No re-verification runs, so `head_verified` is not written and `gate3_accepted` rests on the actor rules alone; `MERGE_REFUSED` then arises only from 08's other refusal reasons |
 | `[HLD-P#12]` off-path handling and the pre-B5 driver | `off_path_event`, `cutover`, `runner = controlplane`, cohorts | Those events are not written; `runner` is `action` or `temporal`; every run before B5 is the `pre_b5` cohort |
@@ -893,7 +905,7 @@ File 02 owns `helix_profile.v1`; this file uses 02's names and types (02 §3.4).
 | `[HLD-P#17]` typed outcomes; INCOMPLETE excluded from measurement | `EXCLUDED` status, 00 §5 outcomes in `phase_ended` | `phase_ended.outcome` is null and only `exit_code` is kept. `EXCLUDED` applies only to runs that opened no PR; a PR opened after a cap stop is measured like any other (plan §3.2's exits). G20 drops |
 | `[HLD-P#18]` active minutes and elapsed wait at every gate | Self-reported active minutes, actor checks, decision 12 as active minutes | Reviewer minutes are gate 3 elapsed minutes, "from opening the pull request to merge, every round included" (plan §3.2); gates 1 and 2 are not measured; no self-report, so `MINUTES_INVALID` and `MINUTES_WRONG_ACTOR` drop; decision 12 reads elapsed minutes under 90; G15 and G30 drop |
 | `[HLD-P lower: audit chain]` anchoring and threat model | 3.6, verify step 8, G5 | No anchors; verify has no `--check-anchors`; the threat model's full-rewrite row reads "not detected"; G5 drops |
-| `[HLD-P lower: Meridian surface]` wider contract tests | G18 over every name in 3.2 | G18 holds only `RunLog`, `RunLog.verify` and `runs --verify` (the plan's surface) |
+| `[HLD-P lower]` dependency-surface contract tests (review item 19) | Withdrawn (standalone decision): core Helix has no Meridian surface to test; G18 pins Helix's own chain schemas | Nothing changes: G18 does not rest on this item |
 | `[HLD-P lower: Jira onboarding]` measurement fields checked by the doctor | 3.16 field ids | The fields are created by hand at onboarding; the doctor does not check them; a missing field shows as `MEASUREMENT_NOT_RUN` |
 
 ## 4. Errors and exits
@@ -903,7 +915,7 @@ File 02 owns `helix_profile.v1`; this file uses 02's names and types (02 §3.4).
 | Segment cannot be opened: lock timeout, previous segment invalid, index mismatch (including a state directory that lacks segments the store records, such as a wrong or empty mount), file exists | Any control activity | `FAILED`, 2 | "Stopped: the audit chain could not be continued ({code}). Nothing further runs until an operator checks the state directory." | `[LLD]` |
 | Event key written before with different data (`AuditEventKeyConflict`) | `ChainWriter.record` | `FAILED`, 2; non-retryable | Same line, with the code | `[LLD]` |
 | Chain write fails (disk, permissions) | Any control activity | `FAILED`, 2 | Same line, with the reason | `[LLD]`: no work proceeds without its record ("every artefact is in the chain", plan §7) |
-| Copy to Meridian's database stops (`mirror_error`) | `ChainWriter.seal` | No change to the outcome; finding `AUDIT_COPY_INCOMPLETE` in the phase findings | Nothing | `[LLD]`, following Meridian's rule that the file is the record and the copy's failure must not stop the work (`runlog.py:102-105`) |
+| The copy stops (`mirror_error`) | `ChainWriter`, recorded at seal | No change to the outcome; finding `AUDIT_COPY_INCOMPLETE` in the phase findings | Nothing | `[LLD]`: the file is the record, and a failure of the copy must not stop the work |
 | Gate comment carrying the anchor fails to post | Gate activity | Activity fails; file 08 retries | Nothing (Jira is down) | `[LLD]` |
 | PR body anchor fails | Gate activity | No change; `anchor_written.failed_targets` | Nothing | `[LLD]` |
 | Meter store unavailable | Gateway | Calls refused with HTTP 503 (03 §3.7.6); nothing is forwarded upstream; no `meter_event` is written, because the store is down; the session ends; `FAILED`, 2 | "Stopped: metering was unavailable, and no model call is made unmetered." | `[LLD]` fail closed |
@@ -919,16 +931,16 @@ File 02 owns `helix_profile.v1`; this file uses 02's names and types (02 §3.4).
 
 ## 5. Guards and tests
 
-Every guard has a passing case and a failing case. Fixtures live under `tests/fixtures/` and are `acme-*` only (00 §11). The Meridian guards run the real pinned `meridian` CLI. `[PLAN]` both directions
+Every guard has a passing case and a failing case. Fixtures live under `tests/fixtures/` and are `acme-*` only (00 §11). The chain guards run the real `helix.audit.chain` code over fixture files; no double stands in for the hash check. `[PLAN]` both directions
 
 | # | Guard | Passing case | Failing case | Fixture |
 | --- | --- | --- | --- | --- |
-| G1 | One altered record is reported at that record | Untouched three-segment chain: verify exit 0, every segment `valid`, copy `identical` | One field of record 4 in `s0002` changed, `hash` kept: exit 1, `CHAIN_BROKEN` at `{segment: s0002, record_index: 4}`, reason "record content does not match its hash". The copy still reads `identical`, because `copy_verdict` compares seals, not content; the test asserts that too, so nobody reads the copy as the integrity check | `acme-audit-chain/` (3 segments plus `meridian.db`) |
+| G1 | One altered record is reported at that record | Untouched three-segment chain: verify exit 0, `valid: true`, every segment `valid`, copy `identical` | One field of record 4 in `s0002` changed, `hash` kept: exit 1, `CHAIN_BROKEN` at `{segment: s0002, record_index: 4}`, reason "record content does not match its hash". The copy still reads `identical`, because the copy is compared by record hashes, not content; the test asserts that too, so nobody reads the copy as the integrity check | `acme-audit-chain/` (3 segments plus their copy) |
 | G2 | A recomputed hash moves the break by one | — (G1 passing case) | Record 4 altered and its `hash` recomputed: `CHAIN_BROKEN` at `record_index: 5`, "prev hash does not match the preceding record"; the copy reads `differs` (`COPY_DIFFERS`) | `acme-audit-chain/` |
 | G3 | A missing segment is found | Segments 1..3 linked: no `SEGMENT_*` finding | `s0002` deleted: `SEGMENT_MISSING` (2) and `SEGMENT_LINK_BROKEN` at `s0003` | `acme-audit-chain/` |
-| G4 | A sealed segment cut short is found | Counts and heads equal `audit_segment`, and every `audit_event_key` row finds its record | Last two records of `s0001` removed (its last event and its `run_end`): exit 1 with `STORE_MISMATCH` for `s0001` (count, head, and the key row of the removed event), `COPY_DIFFERS` for `s0001` (the copy holds more records than the file), `SEGMENT_LINK_BROKEN` at `s0002` (its `prev_segment_head` no longer matches), and `SEGMENT_UNSEALED` for `s0001` as information | `acme-audit-chain/` plus store rows |
-| G5 | Anchors catch a full rewrite | Original chain with `--check-anchors`: anchors `OK`, exit 0 | Chain rewritten consistently (all hashes recomputed, copy and store rebuilt): Meridian reports `valid`, which the test asserts to show the limit, and `--check-anchors` against the fake Jira holding the original anchor gives `ANCHOR_MISMATCH`, exit 1 | `acme-audit-rewrite/`, fake Jira and GitHub recorders |
-| G6 | No agent can write the chain | Sandbox start environment (captured as in 03's test) has no `MERIDIAN_HOME` and its mount list has no path under `$HELIX_STATE_ROOT` | A sandbox spec that mounts the state directory is refused by the runner's spec check | `acme-sandbox-spec/` |
+| G4 | A sealed segment cut short is found | Counts and heads equal `audit_segment`, and every `audit_event_key` row finds its record | Last two records of `s0001` removed (its last event and its seal record): exit 1 with `STORE_MISMATCH` for `s0001` (count, head, and the key row of the removed event), `COPY_DIFFERS` for `s0001` (the copy holds more records than the file), `SEGMENT_LINK_BROKEN` at `s0002` (its `prev_segment_head` no longer matches), and `SEGMENT_UNSEALED` for `s0001` as information | `acme-audit-chain/` plus store rows |
+| G5 | Anchors catch a full rewrite | Original chain with `--check-anchors`: anchors `OK`, exit 0 | Chain rewritten consistently (all hashes recomputed, copy and store rebuilt): the hash check reports `valid`, which the test asserts to show the limit, and `--check-anchors` against the fake Jira holding the original anchor gives `ANCHOR_MISMATCH`, exit 1 | `acme-audit-rewrite/`, fake Jira and GitHub recorders |
+| G6 | No agent can write the chain | The sandbox's mount list has no path under `$HELIX_STATE_ROOT`, and its start environment (captured as in 03's test) names no state path | A sandbox spec that mounts the state directory is refused by the runner's spec check | `acme-sandbox-spec/` |
 | G7 | No secret enters the chain | An event with ordinary values is written unchanged, `redactions: []` | A `run_closed` event whose `data.reason` holds the fixture string `sk-ant-acme-FIXTURE-0000` is written with that value as `<redacted>` and `redactions: ["/data/reason"]`; the chain still verifies | `acme-secret-shapes.json` |
 | G8 | A segment never resumes over itself | Next segment opens as `s0004` and links to `s0003`'s head | A pre-existing `s0004` file with no store row: `open` raises `AuditIndexMismatch` (and only that), activity `FAILED` | `acme-audit-chain/` |
 | G9 | The cap holds | Attempt cap `1.000000`; a call with `spent + reserved + reserve = 1.000000` exactly is admitted | A call with `spent + reserved + reserve` = `1.000000` plus the price of one output token (`0.000005` under `acme-fixture-1`): refused 403 `helix_cap: attempt`, `meter_event.status = refused_cap`, `cap_stop` written, attempt `CAPPED` exit 2, and the fake workflow schedules no further phase | `acme-profile-capped/`, `acme-prices/` |
@@ -940,31 +952,31 @@ Every guard has a passing case and a failing case. Fixtures live under `tests/fi
 | G15 | Active minutes cannot exceed the wait | 64 active with 2,600 elapsed: accepted | 300 active with 120 elapsed: refused `MINUTES_INVALID`, asked again | `acme-measure-merged/` |
 | G16 | Accepted means a listed human non-author merged | Merged by `acme-dev-02`, a gate 3 approver: `accepted = true` | Merged by the bot login: `accepted = false`, `MERGED_BY_AUTHOR`. Merged by `acme-dev-09`, a human who is not a gate 3 approver: `non_author = false`, `accepted = false`, `MERGED_BY_NON_APPROVER`. Merged by `acme-dev-02` with gate 3 refused as `digest_mismatch` (a head never verified): `gate3_accepted = false`, `accepted = false`, `MERGE_REFUSED`, and the run is measured, not excluded | `acme-github-events/`, `acme-audit-gates/` |
 | G17 | Hand rewrites are counted from commits | A human commit to `src/main/mule/acme-order-sapi.xml`: `hand_rewrite_files = 1`, `flows = true` | A human commit to `README.md` only: `hand_rewrite_files = 0` | `acme-github-events/` |
-| G18 | Meridian's surface is the one this file relies on | Contract test on the pinned wheel: the names, signatures and line-cited behaviour in 3.2; `runs --verify` JSON keys `valid`, `records`, `broken_at`, `action_log.state`, exits 0, 1 and 2, run with exactly verify's environment (3.7 step 2); Helix's secret-key set is a superset of `SECRET_KEYS \| _EXTRA_SECRET_KEYS` | A stub Meridian whose `runs --verify` drops `action_log`, or whose `SECRET_KEYS` gains a key Helix lacks: the contract test fails, naming the key | `tests/contract/meridian_runlog/` |
-| G19 | Reads never migrate; writers do | `helix audit verify` over a state directory whose `meridian.db` was created by Meridian's own migrations one revision below head, so it is already in WAL mode (`db/engine.py:145-151`): after verify the database file's SHA-256 and its Alembic revision are unchanged. Opening a segment on the same directory then brings it to head: the writer migrates | A test double of verify that calls Meridian's `bootstrap.ensure_ready` changes the file's SHA-256, and the guard fails on it, which proves the guard can fail | `acme-meridian-db-old/` (built by Meridian, never by hand) |
+| G18 | The chain's own contracts are pinned | Contract tests over `audit_segment_header.v1`, `audit_event.v1` and `audit_verify.v1`: a fixture record's canonical bytes and its `hash`, the genesis value, `seq` running on across two segments, the result keys `valid`, `records`, `broken_at` and `reason`, and exits 0, 1 and 2; Helix's secret-key set equals the list in 3.4 | A writer double that writes keys unsorted, or a space after a separator, or that hashes the record with its `hash` field left in: the stored bytes or the hash differ from the pinned fixture, and the test fails, naming the record. Withdrawn (standalone decision): the contract test against a pinned Meridian wheel | `tests/contract/audit_chain/` |
+| G19 | Reads never write | `helix audit verify` over an audit directory mounted read-only, with the store reached through `helix_audit_reader`: it completes, every segment file's SHA-256 is unchanged afterwards, and no store row has changed | A test double of verify that opens a segment file for append fails on the read-only mount, which proves the guard can fail. Withdrawn (standalone decision): the half of this guard that showed Meridian's database migrating on a write | `acme-audit-chain/` |
 | G20 | INCOMPLETE runs are excluded | A `DONE` run with a review-ready PR is measured | A run whose PR opened as an INCOMPLETE draft: status `EXCLUDED`, absent from decision 12, spend still in the month | `acme-measure-incomplete/` |
 | G21 | Metrics agree | `run_metrics` equals the report's recomputed values | One `meter_event.usd` changed in the fixture store: `METRICS_MISMATCH` | `acme-meter-run-loop/` |
 | G22 | Event keys stop repeated records | `close_phase_attempt` runs, then is retried with the same `step_seq` (a fake Temporal retry): the retry adds no segment and no record, `audit_event_key` is unchanged, and the same event ids are returned. Crash case: a segment whose last `phase_ended` record has no key row is backfilled by the next `open`, and the retry skips it. Lease case: `open_phase_attempt` chains `phase_started` and `credential_issued`, then is retried after another run spent from the month; the broker answers 409, so the retry revokes that lease and gets a new one (08 §3.4): `phase_started` is skipped with the same `caps` (from `issued_with`), the new lease adds `credential_issued` rows under new row keys, and nothing conflicts | The retry presents the same `event_key` for `phase_ended` with a different `outcome`: `AuditEventKeyConflict`, nothing written, activity `FAILED`. A test double of issuance that recomputes `phase_started.caps` on a retry instead of reading `issued_with` gets `AuditEventKeyConflict`, which proves the guard can fail | `acme-audit-retry/` |
 | G23 | Gate rows agree with the chain `[HLD-P#7]` | Every `gate_approval` row of the fixture matches its chain record: no `GATE_APPROVAL_MISMATCH`, exit 0 | One row's `decided_digest` (or `chain_head`) edited in the fixture store: `GATE_APPROVAL_MISMATCH` naming its `gate_approval_id`, exit 1 | `acme-audit-gates/` |
-| G24 | An unreadable copy is a finding only if a copy was made | A segment whose row has `mirrored = 0`, with `meridian.db` replaced by a file that is not a database: `COPY_UNAVAILABLE` as information, exit 0 | The same with `mirrored = 9`: `COPY_UNAVAILABLE` as a finding, exit 1 | `acme-audit-chain/` |
-| G25 | A copy cut short after seal is found | A segment whose row records `records = 9`, `mirrored = 5` and a `mirror_error`, with 5 copied rows: `COPY_INCOMPLETE`, information, exit 0 | A sealed segment with `mirrored = records = 9` and no `mirror_error`, whose last 3 `action_log` rows were deleted: copy `incomplete`, `COPY_TRUNCATED`, exit 1 | `acme-audit-chain/` |
+| G24 | An unreadable copy is a finding only if a copy was made | A segment whose row has `mirrored = 0`, with the copy made unreadable: `COPY_UNAVAILABLE` as information, exit 0 | The same with `mirrored = 9`: `COPY_UNAVAILABLE` as a finding, exit 1 | `acme-audit-chain/` |
+| G25 | A copy cut short after seal is found | A segment whose row records `records = 9`, `mirrored = 5` and a `mirror_error`, with 5 copied rows: `COPY_INCOMPLETE`, information, exit 0 | A sealed segment with `mirrored = records = 9` and no `mirror_error`, whose last 3 copied records were deleted: copy `incomplete`, `COPY_TRUNCATED`, exit 1 | `acme-audit-chain/` |
 | G26 | The kill switch stops spending `[HLD-P#15]` | `caps.kill_switch: false`: an attempt is issued and its calls are admitted | The switch set to `true` while a session runs: within 60 seconds of the fake clock the next call is refused 403 `helix_cap: kill_switch` with `meter_event.status = refused_kill_switch`; the attempt ends `CAPPED` with `cap_stop.cap_kind = kill_switch`; the next issuance is refused the same way and no lease is requested | `acme-profile-capped/` with the switch toggled |
 | G27 | Metering fails closed | Store up: a call is admitted and settled, and one `meter_event` exists | Store connection refused: the call gets HTTP 503, the fake upstream receives zero requests, no `meter_event` exists afterwards, and the phase ends `FAILED` | `acme-meter-attempt/` plus a store fault injector |
 | G28 | The daily ceiling holds when set `[HLD-P#15]` | `caps.client_daily_usd` 20.00: calls on one UTC day summing to 19.99 are admitted, and the next UTC day starts a new `client_day` row. With the key absent, no `client_day` row exists and the same calls are admitted | A call whose `spent + reserved + reserve` on the day row passes 20.00: refused 403 `helix_cap: client_day`, `cap_stop.cap_kind = client_day`, attempt `CAPPED` | `acme-meter-day/` |
 | G29 | The merger's self-report is checked against the commits | Derived `hand_rewrite = false` and the merger's self-report `false`: no finding | Derived `true` (a human commit to a `.dwl` file) and self-report `false`: `HAND_REWRITE_DISAGREES`, `measure` and report exit 1, and `jira.fields.hand_rewrite` holds `true` | `acme-github-events/`, fake Jira |
 | G30 | Only the gate's signer can enter its minutes | Gate 3 minutes set by the Jira account mapped from merger `acme-dev-02` through `people`: accepted | The same field set by the requester's Jira account: refused `MINUTES_WRONG_ACTOR`, one `minutes_refused` comment, value not recorded | `acme-measure-merged/`, fake Jira changelog |
 | G31 | Overshoot stays within its bound, even on a cache miss | The cache-miss case of 3.11: reserve 0.349764 USD, cost 0.313804 USD, no overshoot. A growth case, the next prompt 10,000 tokens longer: overshoot at most 10,000 × 2.00 ÷ 1,000,000 = 0.020000 USD, no `CAP_OVERSHOOT` | Fixture meter events edited so a capped attempt's spend passes its cap by more than its `overshoot_bound_usd`: report `CAP_OVERSHOOT`, exit 1. A gateway double that reserves with the previous call's own class mix reserves 0.056400 USD for the cache-miss call, and the guard fails on it | `acme-meter-cachemiss/`, `acme-prices/` |
-| G32 | A control job on the wrong state directory cannot continue the chain | `control-pre` and `control-post` both bound to the pilot host's mounted state root: `control-post`'s `open` links to the segment `control-pre` sealed and writes the next one | `control-post` bound to a fresh directory that carries a copied `.helix-state-root` marker, so 01's bind check passes, for a run whose `s0001` to `s0003` rows exist: `open` raises `AuditIndexMismatch`, the job ends `FAILED`, the ticket gets the stop line | `acme-audit-b2/` (a state root plus store rows) |
+| G32 | A control job on the wrong state directory cannot continue the chain | `control-pre` and `control-post` both bound to the pilot host's mounted state root: `control-post`'s `open` links to the segment `control-pre` sealed and writes the next one | `control-post` bound to a fresh directory that carries a copied `.helix-state-root` marker, so 01's state-root check passes, for a run whose `s0001` to `s0003` rows exist: `open` raises `AuditIndexMismatch`, the job ends `FAILED`, the ticket gets the stop line | `acme-audit-b2/` (a state root plus store rows) |
 
 ## 6. Open items
 
 | # | Item | Owner | Tag |
 | --- | --- | --- | --- |
-| O1 | 00: (a) §9's export list gains `MERIDIAN_ACTOR` = `helix:{run_id}` for chain-writing processes (`runlog.py:280-283`), the value file 08 uses (08 §3.14); (b) §9 notes that `helix audit verify` sets `MERIDIAN_HOME` outside the control plane, with no other Meridian export (3.7 step 2); (c) §4 lists `helix meter measure --profile DIR (--run RUN_ID \| --sweep) [--out FILE]`, control plane, owning file 09 (3.13); (d) §8 registers this file's schemas `audit_segment_header.v1`, `price_table.v1`, `audit_verify.v1` and `meter_report.v1`, and its tables (3.15) | 00 | `[LLD]` |
-| O2 | `RunLog` cannot resume a file across processes, hence segments. If Meridian later adds a resume entry point, segments could be dropped; until then the contract test holds the genesis-per-instance behaviour | Owner, Meridian | `[LLD]` |
-| O3 | File 08. Already adopted (08 open item 3): the activity names, `audit_record`, `run_close` and `run_measure`, this file's record names, `MERIDIAN_ACTOR` = `helix:{run_id}`, `gate_approval.chain_head` (the head at decision), the measure key form in `external_write`, the `helix_audit_reader` grant and `caps.phase_attempt_usd`. 08's remaining asks of this file are answered in 3.4: `stale_presentation`, `phase_ended.launch` (with `env_names` and `hook_policy_sha256`), `head_verified` and `maven_access`. Still asked: (a) gate 1's `gate_opened` has one writer, 05's `intake-apply`, which posts the gate comment that carries the anchor (3.4, 3.6; 05 §3.15 has adopted it), so 08 §3.7's gate-1 row drops its own write; (b) `approval_id` is derived as UUID v5 of `{client_id}/{source_event_id}/{gate}` (3.3.2), so a retry rebuilds it; (c) a merge refused at gate 3 is measured with `accepted = false` and `MERGE_REFUSED`, not excluded: 08 §3.9.3's "the run is excluded from measurement" and `measurement_excluded` for that case give way to 3.13 (owner question in O7); (d) `close_phase_attempt` writes `lease_closed` after it revokes, and `apply_effects` writes `head_verified` after `run_verify_head` (3.4); (e) the sweep schedule from B3 (3.13); (f) never two chain-writing activities of one run at once, and each client's state directory on one control-plane host (3.3 rule 1; 08 open item 18) | 08 | `[LLD]` |
+| O1 | 00: (a) answered: §4's row for `helix audit verify` describes the in-process check (3.7); (b) answered: §7 lists the audit directory `$HELIX_STATE_ROOT/{client_id}/audit/` (3.3); (c) answered: §4 lists `helix meter measure` (3.13); (d) still asked: §8 registers `audit_verify.v1` and `meter_report.v1` and the tables `run_metrics`, `run_measurement` and `gate_measurement` (3.15), and notes that `audit_segment_header.v1` and `audit_event.v1` records carry the chain fields `seq`, `prev_hash` and `hash` (3.2). Withdrawn (standalone decision): the asks that §9 export an actor variable to chain-writing processes and note a Meridian home directory for verify | 00 | `[LLD]` |
+| O2 | Withdrawn (standalone decision): segments existed because Meridian's run log could not resume a file across processes, and this item waited for a resume entry point. Segments stay as Helix's own choice (3.2): one file per batch keeps each write short, and a sealed file never changes again | — | `[LLD]` |
+| O3 | File 08. Already adopted (08 open item 3): the activity names, `audit_record`, `run_close` and `run_measure`, this file's record names, `gate_approval.chain_head` (the head at decision), the measure key form in `external_write`, the `helix_audit_reader` grant and `caps.phase_attempt_usd`. 08's remaining asks of this file are answered in 3.4: `stale_presentation`, `phase_ended.launch` (with `env_names` and `hook_policy_sha256`), `head_verified` and `maven_access`. Still asked: (a) gate 1's `gate_opened` has one writer, 05's `intake-apply`, which posts the gate comment that carries the anchor (3.4, 3.6; 05 §3.15 has adopted it), so 08 §3.7's gate-1 row drops its own write; (b) `approval_id` is derived as UUID v5 of `{client_id}/{source_event_id}/{gate}` (3.3.2), so a retry rebuilds it; (c) a merge refused at gate 3 is measured with `accepted = false` and `MERGE_REFUSED`, not excluded: 08 §3.9.3's "the run is excluded from measurement" and `measurement_excluded` for that case give way to 3.13 (owner question in O7); (d) `close_phase_attempt` writes `lease_closed` after it revokes, and `apply_effects` writes `head_verified` after `run_verify_head` (3.4); (e) the sweep schedule from B3 (3.13); (f) never two chain-writing activities of one run at once, and each client's state directory on one control-plane host (3.3 rule 1; 08 open item 18); (g) 08 §3.2 and §3.14 describe the chain's storage, its segments and its actor by the withdrawn run log and its database; they follow 3.2 and 3.3 here. Withdrawn (standalone decision): the Meridian actor variable that 08 had adopted | 08 | `[LLD]` |
 | O4 | Files 07 and 06: (a) 07 places the `Audit anchors` list in the PR body's provenance block, appended at each gate (07 §3.8.5's templates, as 07 notes); (b) 07's `pr_provenance.v1.phases[]` and 06's `provenance` rename `prompt_sha256` and `agent_definition_sha256` to `prompt_hash` and `agent_definition_hash`, with 3.4's inputs (05 has done so). Answered for 07: `record_measurement` takes `merge_facts` (3.13 step 3); in B2, `accepted` requires `verify_on_merged_head = success` (`gate3_accepted`); `helix gate record` writes `gate_approved` with `signal_source.kind = gate_record`; the bot-only-approval proof runs outside any run, so it is not a chain event and belongs in 02's `onboarding_evidence`; G20's `merged_without_verify` is a measured `MERGE_REFUSED`, not an exclusion (O7) | 07, 06 | `[HLD-P lower]`, `[LLD]` |
-| O5 | File 02: (a) answered: 02 has the optional `jira.fields.hand_rewritten_self_report` and includes the `metering` and `measurement` blocks by reference (02 §3.4); (b) doctor checks for price-table coverage of every routed model (3.10), and for `flock` and WAL support on the state directory (3.3, O14); (c) the durable append at merge (02 §3.10, rule 7) is chained as `profile_keys_appended`; a profile edit outside a run has no chain and stays 02's own record (3.4); (d) 02 tags the turnaround default of 2 business days `[PLAN-DEFAULT 6]`, but two days is decision 6's recommendation, not its default (3.16) | 02 | `[LLD]` |
+| O5 | File 02: (a) answered: 02 has the optional `jira.fields.hand_rewritten_self_report` and includes the `metering` and `measurement` blocks by reference (02 §3.4); (b) doctor checks for price-table coverage of every routed model (3.10), and for `flock` and `fsync` support on the state directory (3.3, O14); (c) nothing is written to the profile at merge, so 02's append (02 §3.10, rule 7) and the `profile_keys_appended` event go (3.4); a profile edit outside a run has no chain and stays 02's own record; (d) 02 tags the turnaround default of 2 business days `[PLAN-DEFAULT 6]`, but two days is decision 6's recommendation, not its default (3.16) | 02 | `[LLD]` |
 | O6 | The per-client monthly ceiling has no default in the plan or the HLD; the owner sets a number per client | Owner | `[HLD-P#15]` |
 | O7 | Decision 12 read as gate 3 active minutes (default here) or as the sum over gates 1–3; whether a flow rewritten by hand should also fail the third-ticket target (the plan says only "no mapping rewritten by hand"; the stricter reading is `[LLD]` and not the default); and whether a merge refused at gate 3, such as an unverified head, is measured as not accepted (default here) or excluded (07 G20, 08 §3.9.3) | Owner | `[HLD-P#18]`, `[LLD]` |
 | O8 | A command to flip the kill switch without editing the profile (proposed `helix meter kill-switch {on,off}`) is not in 00 §4; until it is, the switch is the profile key | 00, owner | `[LLD]` |
@@ -973,8 +985,13 @@ Every guard has a passing case and a failing case. Fixtures live under `tests/fi
 | O11 | Claude Code's behaviour on a 403 from its base URL (no retry, session ends); whether it makes extra or parallel model calls that the meter will count; whether `ResultMessage.usage` covers every call (if it differs systematically from the gateway's sums, `USAGE_DISAGREES` becomes information only) | Implementation | `[VERIFY]` |
 | O12 | The first published price table: values copied from each provider's pricing page with `checked_on`; Bedrock and Vertex regional pricing | Implementation | `[VERIFY]` |
 | O13 | Jira: a transition screen can require a numeric custom field; comment edit history is visible; comment bodies are stored as ADF and the anchor survives as its own paragraph (3.6); the issue changelog endpoint gives the author account id and time of a field change (3.13). GitHub: `pull_request_review` state values, merge and close event fields, the commit author of App commits, PR body edit history | Implementation | `[VERIFY]` |
-| O14 | The durable storage product for `$HELIX_STATE_ROOT`, on the pilot host in B2 and the control-plane host from B3: local or block storage on one host per client state directory, never a network file system; SQLite WAL and `flock` work on it; backup and tested restore (`[HLD-P#19]`, files 01 and 08) | 01, 08 | `[VERIFY]` |
+| O14 | The durable storage product for `$HELIX_STATE_ROOT`, on the pilot host in B2 and the control-plane host from B3: local or block storage on one host per client state directory, never a network file system; `flock` and `fsync` behave on it as 3.3 needs; backup and tested restore (`[HLD-P#19]`, files 01 and 08) | 01, 08 | `[VERIFY]` |
 | O15 | File 03: answered: 3.7.2 and 3.7.5 adopt this file's issuance, admission and settlement without restating the arithmetic, the attempt row created by issuance, the `usd_cap` and `spent_usd` mirrors written at settlement, the `capped` state with `cap_client_day`, and the `helix_cap:` prefix; 3.7.4's digest is `request_system_sha256`, not the provenance `prompt_hash`; no `meter_event` is written at mint or while the store is down (3.9). Its open item 16's per-client audit writer is 3.1's store rows chained by the next control activity, and 3.6.3's issue, redeem and revoke records are `credential_issued` and `lease_closed` (3.4). Its guards *Cap holds* and *Concurrent reservations* assert `helix_cap:` and `capped`, and 3.5.5 records a released Draft as `draft_released`. Nothing further is asked of 03 | 03 | `[LLD]` |
-| O16 | File 01: (a) answered: 01 has adopted the segments and `runlog.open_segment` (3.3.1), its durable pilot state root is this file's B2 rule (3.3), §3.5.2 sets `MERIDIAN_ACTOR` = `helix:{run_id}` (its open-item row on the actor can close), and `run_state.v1.steps[].step_seq` keeps the step for event keys (3.3.2); (b) `runs_verify` builds 3.7 step 2's environment and needs no profile bind, so verify runs outside the control class as 00 §4 says; 01 §3.5.2's `runs --verify` column changes to match; (c) the B2 sweep timer on the always-on pilot host (3.13); (d) the per-client PostgreSQL fallback of 3.3 rule 4 would need the bridge to allow `MERIDIAN_DATABASE_URL` | 01 | `[LLD]` |
+| O16 | File 01: (a) answered: 01's durable pilot state root is this file's B2 rule (3.3), and `run_state.v1.steps[].step_seq` keeps the step for event keys (3.3.2); (b) the `.helix-state-root` marker check stays, as a Helix-owned check at the start of each control job, because the bridge bind that held it is withdrawn (3.3, G32); (c) the B2 sweep timer on the always-on pilot host (3.13); (d) 01's artefact-carry fallback carries segment files only (3.3.1 item 5). Withdrawn (standalone decision): the bridge's segment and verify functions, the Meridian actor variable, the environment of the verify subprocess, and the PostgreSQL fallback for Meridian's copy | 01 | `[LLD]` |
 | O17 | File 10: answered: `security_refusal.data.code` carries the owner's code and `data.rule_id` the rule id when there is one (3.4), since 10 defines no codes; a refused gate signal is recorded once, as `signal_refused`; refusals with no run are not chained. Open: this file's fixtures move to 10's pair `acme-a` and `acme-b` (10 §3.11) at implementation; the `acme` examples here exercise no naming grammar | 10 | `[LLD]` |
-| O18 | File 05: answered. Its four event types, `comment_posted.delivery`, the purpose `intake_notice` and `draft_released` are in 3.4; `intake-apply` is gate 1's one `gate_opened` writer; 05 §3.15 writes through `ChainWriter.record` with step-form keys (3.3.2), never a direct `RunLog` | 05 | `[LLD]` |
+| O18 | File 05: answered. Its four event types, `comment_posted.delivery`, the purpose `intake_notice` and `draft_released` are in 3.4; `intake-apply` is gate 1's one `gate_opened` writer; 05 §3.15 writes through `ChainWriter.record` with step-form keys (3.3.2), never by appending to a segment file itself | 05 | `[LLD]` |
+| O19 | **To design:** the copy (3.3). Needed behaviour: every record written to a segment file is also held in a second, Helix-owned place, and a read gives one of the six states of 3.3 by comparing record hashes. Open: where it lives (a Helix-store table is the expected home), its schema, its reader, the reader role's grant, and whether verify step 6 then needs the store | Owner, 09 | Standalone architecture decision; To design |
+| O20 | **Plan amendment needed.** Plan §3.5 names another tool's run-log chain, that tool's verify command behind `helix audit verify`, its database copy and a state-directory variable of that tool. The standalone design replaces them with `helix.audit.chain`, an in-process `helix audit verify`, a Helix-owned copy and `$HELIX_STATE_ROOT/{client_id}/audit/` (3.2, 3.3, 3.7) | Owner: amend the plan | Standalone architecture decision |
+| O21 | **To design:** recovery from a torn write (3.2). Needed behaviour: a last line cut off by a crash, or a segment file with no complete header, must not lose a complete record and must not need more than an operator's check to clear. Until it is designed, the next `open` refuses with `AuditChainBroken` | 09 | To design |
+| O22 | **To design:** the chain record for a credential handed to `run_discover` or to an optional `EstateProvider` (3.4, `credential_issued`). 03 and 05 define the handout; its `credential_kind` is added to 3.4 first | 03, 05 | To design |
+| O23 | The seal record `segment_sealed` and the segment form of `event_key` (3.3, 3.3.2, 3.4) are this revision's choice for what the withdrawn run log's end record did: they let a reader of the file alone tell a finished batch from one cut short. The owner confirms; without it, sealing rests on the `audit_segment` row alone | Owner | `[LLD]` |

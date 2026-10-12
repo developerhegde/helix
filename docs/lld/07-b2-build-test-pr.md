@@ -35,7 +35,7 @@ Sub-phase **B2**. From a human-confirmed fact sheet and an approved design bundl
 | `phases/b2/scaffold.py`, `phases/scaffold.py` | Agent sandbox; control plane on route `anypoint_cli_cp` (`helix scaffold`, §3.11) | `ScaffoldAdapter` with `DxMcpScaffold` and `CliScaffold` | `[PLAN]` routes, `[LLD]` adapter |
 | `phases/b2/pomguard.py` | Agent sandbox | Pom guard PG1-PG8 (§3.4.3); called by `verify` and by 04's `mcp__helix__maven` tool before each run | `[HLD-P#5]` |
 | `phases/b2/properties.py` | Agent sandbox, uid `runner` | Renders all configuration and test files from the naming contract and approved key list | `[HLD-P#9]` |
-| `validation/{design_binding,pom_policy,reference_scan,property_policy,secret_policy,project_policy,report}.py` | Agent sandbox, no agent session | Standalone B2 validation subsystem: design integrity, Maven policy, reference scan, property and marker rules, plaintext-secret detection, generated-tree policy, and deterministic report | Standalone B2 validation decision |
+| `validation/{design_binding,pom_policy,reference_scan,property_policy,naming_policy,project_policy,evidence,report}.py` | Agent sandbox, no agent session | Standalone B2 validation subsystem: design integrity, Maven policy, reference scan, property and marker rules, plaintext-secret detection, generated-tree policy, and deterministic report | Standalone B2 validation decision |
 | `phases/b2/staticchecks.py` | Agent sandbox | SC1-SC8 (§3.6): property sources, global properties, literal config values, Java interop, marks, anchors, design artefacts, key list | `[LLD]` |
 | `phases/b2/mockguard.py`, `assertguard.py`, `mutation.py` | Agent sandbox | Static suite checks; mutation selection and runs | `[PLAN]` `[HLD-P lower]` |
 | `naming.py`, `validation/` | Agent sandbox, no agent session for validation | Compiles and checks naming-contract paths, scans source references, validates key-list equality, markers, plaintext-secret rules, POM policy, and forbidden generated paths without an external estate dependency | Standalone B2 validation decision |
@@ -66,7 +66,7 @@ Inside the sandbox there are three uids, named as in 04 §3.12, which owns the u
 | Confirmed fact sheet | `fact-sheet.confirmed.json`, `fact_sheet.v1`: a byte copy of the approved revision `fact-sheet.r{n}.json`, and the only file downstream agents read (05 §3.12). In the B2 pilot, before B3, the hand-confirmed file that 01 §3.9's `control-pre` accepted | Two staged inputs, `fact_sheet_typed` and `fact_sheet_text` (04 §3.4); every requester-derived free-text field is quoted data | Both entries carry `source_sha256` (the file's SHA-256) and `gate1_digest` (the live gate-1 approval's `decided_digest`), written by the activity as 06 §3.3 binds gate 1; S1 compares them (§3.11.1). No `status` check: the confirmed copy keeps the revision's bytes (05 open item 9) | `[PLAN]` file, `[HLD-P#3]` quoting, `[HLD-P#7]` digest |
 | Design bundle | `design_bundle.v1` (06), the revision gate 2 approved | `design_bundle_typed` and `design_text` (04 §3.4); the bundle file and its member files (contract, HLD, LLD) also staged runner-only under `/in/design/` for S3 and SC7 | `status` is `complete`; both bundle entries carry `source_sha256` (the bundle file's SHA-256) and `gate2_digest` (§3.11.1); B2 reads the fields in §3.10.4 | `[PLAN]` `[HLD-P#7]` |
 | Naming contract and standards bundle | Compiled profile contract and approved bundle, staged as immutable attempt inputs | Naming, environment paths, Maven baseline, logging, property and validator rules | Never `.env`, credentials, or mutable profile paths | Standalone B2 decisions |
-| Base tree | Control plane exports, as an archive, the head of `helix/{ticket_key}` when that branch exists (B4's design draft PR), else the default branch head | Repository files | `base_sha` recorded in `build_report.v1`. When the branch exists, its head must hold `docs/design/design-bundle.json` whose SHA-256 equals the gate-2 digest, else `FAILED`, `INPUT_DIGEST_MISMATCH` | `[HLD-P#7]` `[LLD]` |
+| Base tree | Control plane exports, as an archive, the head of the ticket's branch, named by the standards bundle's `review.branch_pattern` (00 §6), when that branch exists (B4's design draft PR), else the default branch head | Repository files | `base_sha` recorded in `build_report.v1`. When the branch exists, its head must hold `docs/design/design-bundle.json` whose SHA-256 equals the gate-2 digest, else `FAILED`, `INPUT_DIGEST_MISMATCH` | `[HLD-P#7]` `[LLD]` |
 | Prior evidence | `/in/retry-findings.json` (04 §3.4), retries only | Failure codes, rule ids and `where`, and the last 200 log lines, as quoted data | Never the previous transcript | `[LLD]` |
 
 Never handed to the build agent: ticket text or comments, raw Discover output, any Jira, GitHub, connected-app, Nexus or model-route credential `[PLAN]` `[HLD-P#1]`.
@@ -137,7 +137,7 @@ Either way the result is normalised by deterministic code: parent set to the gol
 
 #### 3.4.3 Golden parent pom and pre-build check `[HLD-P#5]`
 
-Helix ships `templates/golden-parent/pom.xml`. At onboarding the client publishes it, or names its own parent that pins the same items, to its Maven repository; the profile records coordinates and SHA-256 (`build.golden_parent`). The client's own pipeline must resolve it too, so it cannot live only behind Helix's proxy `[LLD]`. The parent pins: `app.runtime`; mule-maven-plugin `[VERIFY]` version, declared with `<extensions>true</extensions>` because `mule-application` packaging needs it `[VERIFY]`; munit-maven-plugin and MUnit libraries at 3.7.4; `runtimeProduct` MULE_EE `[VERIFY]`; the coverage block (`runCoverage` true, `failBuild` true, `requiredApplicationCoverage` = `${helix.coverage.application}`, JSON and HTML formats, element names `[VERIFY]`); MUnit `systemPropertyVariables` setting `{build.env_property}` to `munit` `[VERIFY]`; versions of every lifecycle plugin. Maven settings (`MAVEN_SETTINGS`) hold one mirror of `*` to the proxy URL and no `<servers>` `[HLD-P#5]`.
+The parent POM is the client's: the client publishes and maintains it in its Maven repository, and the standards bundle records its coordinates (`project.golden_parent`). Helix ships `templates/golden-parent/pom.xml` only as a reference a client may start from, and never writes the client's parent. The client's own pipeline must resolve it too, so it cannot live only behind Helix's proxy `[LLD]`. The parent pins: `app.runtime`; mule-maven-plugin `[VERIFY]` version, declared with `<extensions>true</extensions>` because `mule-application` packaging needs it `[VERIFY]`; munit-maven-plugin and MUnit libraries at 3.7.4; `runtimeProduct` MULE_EE `[VERIFY]`; the coverage block (`runCoverage` true, `failBuild` true, `requiredApplicationCoverage` = `${helix.coverage.application}`, JSON and HTML formats, element names `[VERIFY]`); MUnit `systemPropertyVariables` setting `{build.env_property}` to `munit` `[VERIFY]`; versions of every lifecycle plugin. Maven settings (`MAVEN_SETTINGS`) hold one mirror of `*` to the proxy URL and no `<servers>` `[HLD-P#5]`.
 
 The pom guard runs before every Maven run: inside 04's `mcp__helix__maven` tool, which calls `pomguard.check(repo_dir, bundle, lookup_log)` before it starts Maven (04 §3.9.1), and at the start of each `verify` stage. It returns the list of findings below; any finding refuses the run.
 
@@ -326,7 +326,7 @@ Static checks `[LLD]`, run by `phases/b2/staticchecks.py` over the verified copy
 | ID | Check | Code | Side |
 | --- | --- | --- | --- |
 | SC1 | `global.xml` equals the rendered file byte for byte, and no other file holds a `<configuration-properties>` or `<secure-properties:config>` element (element names `[VERIFY]`). An extra property source would define keys outside the contract's configuration paths, so its values would escape the property and secret rules | `PROPERTY_SOURCE_UNEXPECTED` | build |
-| SC2 | No `<global-property>` element anywhere: it resolves a key by the code itself (`references.py` `SourceScan.defined`; `analyze.py:910-981`) | `GLOBAL_PROPERTY_DECLARED` | build |
+| SC2 | No `<global-property>` element anywhere: it resolves a key by the code itself, outside the approved property files | `GLOBAL_PROPERTY_DECLARED` | build |
 | SC3 | On elements whose name ends in `config` or `connection`, attributes named `host`, `port`, `url`, `username`, `password`, `clientId`, `clientSecret` or `token` hold a `${...}` reference, not a literal (connector schemas `[VERIFY]`) | `LITERAL_CONFIG_VALUE` | build |
 | SC4 | No Java interop: no `java!` import in a DataWeave file, no Java module or Scripting module element (syntax and element names `[VERIFY]`); `src/main/java/**` is PG8's | `JAVA_INTEROP` | build |
 | SC5 | Base and test files hold no mark (the mark grammar of §3.4.4) | `MARKER_POLICY_VIOLATION` | build |
@@ -415,7 +415,7 @@ Outcome: `AWAITING_GATE`, exit 1. The control plane, not `pr`, moves the ticket 
 
 | Step | Rule | Tag |
 | --- | --- | --- |
-| Branch | `helix/{ticket_key}`. With B4, the branch exists and its head is the commit gate 2 approved, which was build's `base_sha` (§3.3). In the pilot without B4, `ensure_branch` creates it from `base_sha`. Every commit after `base_sha` must be the App's (`BranchForeign`, §3.11), else `PR_BRANCH_DIVERGED`, `INCOMPLETE`. Never force-push | `[LLD]` |
+| Branch | Named by the standards bundle's `review.branch_pattern`, for example `feature/{ticket_key}-{slug}` (00 §6; standards mapping decision D4). With B4, the branch exists and its head is the commit gate 2 approved, which was build's `base_sha` (§3.3). In the pilot without B4, `ensure_branch` creates it from `base_sha`. Every commit after `base_sha` must be the App's (`BranchForeign`, §3.11), else `PR_BRANCH_DIVERGED`, `INCOMPLETE`. Never force-push | `[LLD]` |
 | Scan | Authoritative secret scan over the exact tree before `push_tree` | `[PLAN]` |
 | Commit | `push_tree` (§3.11). Precondition: `git write-tree` of `tree_dir` equals the evidence `tree_sha`. Postcondition: the new head commit's tree SHA, read back through 03's `get_pr` and then the commit (API `[VERIFY]`), equals it. Either failing gives `PR_TREE_MISMATCH`, `FAILED` | `[HLD-P#8]` |
 | Message | `{ticket_key}: {title}` and trailers `Helix-Run`, `Helix-Tree`, `Helix-Evidence` (report SHA-256s) | `[LLD]` |
@@ -488,7 +488,7 @@ Contract `{contract_path}` ({ruleset} at {violations} violations) · HLD `docs/d
 | Mutation check | {killed}/{k} killed ({operators}) | INCOMPLETE |
 
 ### Values owed after merge (key holder, before deploy)
-| Environment | SET keys | ENCRYPT keys | Rulebook notes |
+| Environment | SET keys | ENCRYPT keys | Notes |
 
 ### Reviewing
 After pushing changes, add `helix:reverify`; merge needs `helix/verify` on the head commit.
@@ -524,7 +524,7 @@ sequenceDiagram
   participant R as Receiver (03)
   participant C as Control step (pilot control job or B5 control activity)
   participant V as verify stage head (pilot agent job or B5 agent activity, no secret)
-  H->>GH: push to helix/{ticket_key}
+  H->>GH: push to the ticket's branch (review.branch_pattern)
   GH->>R: pull_request synchronize [VERIFY] payload
   R->>GH: pr_pushed: 03's on_foreign_push removes helix:review-ready, helix/verify pending on the new head
   H->>GH: adds label helix:reverify
@@ -554,7 +554,7 @@ The plan requires, per repository, a real pull request approved only by the bot 
 | P1 | An operator test account, not the App and not a gate-3 approver, opens a proof PR from `helix-proof/{date}` changing only `docs/helix-proof.md`. The operator does this by hand; the account's credential never reaches Helix |
 | P2 | The proof client, which is not the git writer and whose allowlist holds exactly `POST /repos/{owner}/{repo}/pulls/{number}/reviews` with event `APPROVE` for that one PR number plus `GET` of that PR (API `[VERIFY]`), submits one approval as the App |
 | P3 | It reads the PR's mergeability (field, for example `mergeable_state`, `[VERIFY]`) and expects it blocked |
-| P4 | It records the PR number, the mergeability result and the date in 02's `github.repositories[].bot_approval_proof {pull_request, recorded_on}`, under 02's profile lock with a backup, and in the done note. It writes no chain event: the proof runs in the doctor, outside any run (09 §3.4) |
+| P4 | It records the PR number, the mergeability result and the date in 02's `github.repositories[].bot_approval_proof {pull_request, recorded_on}`; where that record is kept is open, because Helix no longer writes to the profile (02 §6), and in the done note. It writes no chain event: the proof runs in the doctor, outside any run (09 §3.4) |
 | P5 | The proof PR stays open and unmerged, so 02's ONB-31 re-reads it on every doctor run and expects it still blocked; a closed or mergeable proof PR fails ONB-31, and the proof is run again (02) |
 
 If the PR shows mergeable after the App-only approval, the proof fails: nothing is recorded, `GH_PROOF_MISSING` stays set, and preflight refuses every PR write to that repository.
@@ -573,7 +573,7 @@ File 09 owns the measurement: the definitions of *accepted*, change requests, ha
 | `verify_on_merged_head` | enum `success`, `failure`, `missing` | Check runs on the merged head `[VERIFY]` | Proposed condition of `accepted` (§6) |
 | `excluded_reasons[]` | enum `readied_while_incomplete`, `merged_without_verify`, `run_incomplete` | PR history and the run's outcome | `EXCLUDED` status `[HLD-P#17]` |
 
-`record-merge` writes `merge_facts`, calls 09's `record_measurement(run_id)` in-process (09 §3.13, B2 trigger row; 09 may read `merge_facts` rather than call GitHub a second time, §6), posts `b2.merged`, and ends `DONE`, exit 0. It runs every step for every merge, whatever 08 recorded for gate 3: the merged code reads those keys, so the append still happens; a refused gate 3 is 08's record, which makes the run not *accepted* and excluded from measurement (08 §3.9.3) `[LLD]`. A missing minutes figure is 09's concern (its window and `NOT_RUN` status), never an outcome of `pr`.
+`record-merge` writes `merge_facts`, calls 09's `record_measurement(run_id)` in-process (09 §3.13, B2 trigger row; 09 may read `merge_facts` rather than call GitHub a second time, §6), posts `b2.merged`, and ends `DONE`, exit 0. It runs every step for every merge, whatever 08 recorded for gate 3; a refused gate 3 is 08's record, which makes the run not *accepted* and excluded from measurement (08 §3.9.3) `[LLD]`. A missing minutes figure is 09's concern (its window and `NOT_RUN` status), never an outcome of `pr`.
 
 ### 3.10 Schemas
 
@@ -607,7 +607,7 @@ All three carry `"schema"` and are validated on read and write. Hex digests are 
 ```json
 {"schema":"build_report.v1","stage":"build","run_id":"acme.ACME-123","phase_attempt_id":"acme.ACME-123.build.1",
  "client_id":"acme","ticket_key":"ACME-123","head_sha":null,
- "project":{"repo_name":"acmea-src-glb-order-sys-v1","base_sha":"4b1e…","tree_sha":"9a7c…","archive":{"path":"build/1/project.tar.gz","sha256":"c2d0…"},"main_digest":"77e1…"},
+ "project":{"repo_name":"acme-src-glb-order-sys-v1","base_sha":"4b1e…","tree_sha":"9a7c…","archive":{"path":"build/1/project.tar.gz","sha256":"c2d0…"},"main_digest":"77e1…"},
  "inputs":{"fact_sheet_sha256":"1f3a…","design_bundle_sha256":"8e44…","profile_view_sha256":"02bc…","gate1_digest":"1f3a…","gate2_digest":"8e44…"},
  "design_artefacts":{"verdict":"pass","files":[]},
  "scaffold":{"route":"anypoint_cli","tool_version":"[VERIFY]","raw_runtime":"4.9.N","runtime_defaulted":false},
@@ -622,7 +622,7 @@ All three carry `"schema"` and are validated on read and write. Hex digests are 
  "verdict":"pass","failure_codes":[],"created_at":"2026-10-08T10:00:00Z"}
 ```
 
-`4.9.N` stands for the pinned patch; the fixture profile uses `caps.build_retry_cap: 3`, chosen for fixtures. The repository name `acmea-src-glb-order-sys-v1` parses under the `acme-a` fixture grammar (10 §3.11): the fixture's naming contract, with parts `prefix`, `scope`, `region`, `name`, `layer` and `version`, prefix `acmea` and layers `exp`, `prc`, `sys`; `acme-order-sapi` stays the fixture directory's name only.
+`4.9.N` stands for the pinned patch; the fixture profile uses `caps.build_retry_cap: 3`, chosen for fixtures. The repository name `acme-src-glb-order-sys-v1` parses under the `acme-a` fixture grammar (10 §3.11): the fixture's naming contract, with parts `prefix`, `scope`, `region`, `name`, `layer` and `version`, prefix `acme` and layers `exp`, `prc`, `sys`; `acme-order-sapi` stays the fixture directory's name only.
 
 #### 3.10.2 `test_report.v1`
 
@@ -666,7 +666,7 @@ The fixture threshold of 80 percent is chosen with no evidence; each profile set
 | `run_id`, `client_id`, `ticket_key` | string | Conventions §6 |
 | `kind` | enum | `design` (from `pr --stage design`), `code` |
 | `repository` | object | `org` (02's `github.org`), `name`; `name` equals 06's `repo_name` |
-| `pull_number`, `branch` | int or null, string | `pull_number` is null when no PR exists, as after a `pr --mode stop` that wrote nothing; the workflow reads it for the run-level exit (§4). Branch `helix/{ticket_key}` |
+| `pull_number`, `branch` | int or null, string | `pull_number` is null when no PR exists, as after a `pr --mode stop` that wrote nothing; the workflow reads it for the run-level exit (§4). `branch` is the name rendered from the standards bundle's `review.branch_pattern` |
 | `base_sha`, `head_sha` | sha40 | — |
 | `tree_sha` | sha40 or null | The evidence tree; null for `kind: design` |
 | `evidence_tree_match` | bool or null | `tree_sha` equals the evidence report's and the head commit's tree; null for `kind: design` |
@@ -675,7 +675,7 @@ The fixture threshold of 80 percent is chosen with no evidence; each profile set
 | `phases[]` | object | `phase` enum `intake`, `design`, `build`, `test`; `source` enum `phase_result`, `design_bundle`, `fact_sheet`; `phase_attempt_id`; `model`; `provider` enum `anthropic`, `bedrock`, `vertex`; `region`; `prompt_hash`; `agent_definition_hash` (09 §3.4's shared identifiers, computed with 09's definitions, 09 O4); `usd` number or null. `design` comes from the bundle's `provenance` (06 §3.13, which carries the same two identifiers); `intake` from the confirmed fact sheet's `produced_by` (05 §3.7) with provider, region and prompt hash from that attempt's `phase_result.v1`, and is absent when the pilot's sheet was confirmed by hand |
 | `artefacts` | object | `fact_sheet_sha256`, `design_bundle_sha256`, `build_report_sha256`, `test_report_sha256` (null for `kind: design` and while absent) |
 | `gates[]` | object | `gate` (conventions §6), `approval_id` (08's `gate_approval` row), `signer_id`, `signed_at`, `digest` (the row's `decided_digest`), `waiver` bool; gate 3 added at merge |
-| `chain_head` | object | `sha256` of the last runlog record, `records` int |
+| `chain_head` | object | `sha256` of the last audit-chain record, `records` int |
 | `preflight` | object | GH1-GH7 results, including the recorded *approve and run* state |
 | `versions` | object | `helix`, `validation_policy` |
 | `merge_facts` | object or null | §3.9 facts; null until merge |
@@ -683,7 +683,7 @@ The fixture threshold of 80 percent is chosen with no evidence; each profile set
 
 ```json
 {"schema":"pr_provenance.v1","run_id":"acme.ACME-123","client_id":"acme","ticket_key":"ACME-123","kind":"code",
- "repository":{"org":"acme-integrations","name":"acmea-src-glb-order-sys-v1"},"pull_number":42,"branch":"helix/ACME-123",
+ "repository":{"org":"acme-integrations","name":"acme-src-glb-order-sys-v1"},"pull_number":42,"branch":"feature/ACME-123-order-sys",
  "base_sha":"4b1e…","head_sha":"c7f2…","tree_sha":"5d20…","evidence_tree_match":true,"state":"ready","incomplete_reasons":[],
  "phases":[{"phase":"design","source":"design_bundle","phase_attempt_id":"acme.ACME-123.design.1","model":"anthropic.claude-opus-5-5","provider":"bedrock","region":"eu-west-1",
    "prompt_hash":"3a70…","agent_definition_hash":"9b12…","usd":null},
@@ -706,9 +706,9 @@ B2 reads only fields that 06 §3.13 and §3.10 define, under 06's names and cons
 | One application | `applications[] {role, layer, primary, repository_name, ...}` | Any entry besides the primary one: `INCOMPLETE`, `MULTI_APP_NOT_SUPPORTED`, naming each extra application's `role` and `repository_name` in the phase result. 06 §3.14 puts every application of an integration in one repository, the others in directories named by their repository-form names; B2 builds the primary one per run, and building the others is an open item (§6) | `[LLD]` |
 | Repository name | `repo_name` (equal to the primary `repository_name`) | S2 parses it; it is `repo_name` in the reports | `[PLAN]` |
 | Title | `title` (5-80 characters of plain text) | PR title, commit message, body | `[LLD]` |
-| Environments | `environments[]` (the `environments` fact's targets, in the profile's order; at least two) | E1..En; fewer than two gives `INCOMPLETE`, `INPUT_INCOMPLETE`, because the naming contract requires two non-production environments | `[LLD]` |
+| Environments | `environments[]` (the `environments` fact's targets, in the naming contract's order; at least two) | E1..En; fewer than two gives `INCOMPLETE`, `INPUT_INCOMPLETE`, because the naming contract requires two non-production environments | `[LLD]` |
 | Design artefacts | `contract {path, sha256}`, `documents.hld {path, sha256}`, `documents.lld {path, sha256}` | Placed in S3; checked by SC7 | `[HLD-P#7]` |
-| Key list | `keys[]` with `app` equal to `repo_name`: `key`, `class`, `kind`, `type`, `value`, `fact_ref`, `fixture`, `environments`, `config_file` | Placement below; each rendered path must equal the key's `config_file[E]` (06 fills both from `naming.config_file_path`), else `RENDER_FAILED` | `[PLAN]` |
+| Key list | `keys[]` with `app` equal to `repo_name`: `key`, `class`, `kind`, `type`, `value`, `fact_ref`, `fixture`, `environments`, `config_file` | Placement below; each rendered path must equal the key's `config_file[E]` (06 fills both from `NamingContract.configuration_paths`), else `RENDER_FAILED` | `[PLAN]` |
 | Deployment keys | `deployment_property_keys[]` | Declared in the bundle and listed in the PR body; never written to a file or a profile (§3.4.4) | `[PLAN]` |
 | Connectors | `connectors[] {group_id, artifact_id, version, exchange_asset_id, operations[]}` | PG5's version source; the build agent reads them from `design_bundle_typed` | `[PLAN]` versions from Exchange |
 | External calls | `external_calls[]` (`{element}@{config_ref}`, for example `http:request@acme-wms-config`) | The mock guard's boundary (§3.5.2) | `[PLAN]` never mock the processor under test |
@@ -738,7 +738,7 @@ B2 reads only fields that 06 §3.13 and §3.10 define, under 06's names and cons
 | --- | --- | --- | --- |
 | `helix build` | none | `build_report.v1`, project archive, `phase_result.v1` | Per `PhaseOutcome` |
 | `helix test` | none | `test_report.v1`, project archive, `phase_result.v1` | Per `PhaseOutcome` |
-| `helix pr` | `--stage {design,code}` (default `code`); `--mode {sync,stop,record-merge}` (code stage only, default `sync`); `--reason CODE` (repeatable; `stop` only) | `pr_provenance.v1`, `phase_result.v1` | Design: `AWAITING_GATE` 1, `INCOMPLETE` 1, `FAILED` 2. `sync`: `READY_FOR_REVIEW` 1, `INCOMPLETE` 1, `FAILED` 2. `stop`: `DONE` 0, `FAILED` 2. `record-merge`: `DONE` 0, `INCOMPLETE` 1 (02's append refused), `FAILED` 2 |
+| `helix pr` | `--stage {design,code}` (default `code`); `--mode {sync,stop,record-merge}` (code stage only, default `sync`); `--reason CODE` (repeatable; `stop` only) | `pr_provenance.v1`, `phase_result.v1` | Design: `AWAITING_GATE` 1, `INCOMPLETE` 1, `FAILED` 2. `sync`: `READY_FOR_REVIEW` 1, `INCOMPLETE` 1, `FAILED` 2. `stop`: `DONE` 0, `FAILED` 2. `record-merge`: `DONE` 0, `FAILED` 2 |
 | `helix verify` | `--stage {build,test,head}` (`keys` reserved for file 11), `--project DIR`, `--evidence FILE` (head only), `--head-sha SHA` (head only), `--seed-file FILE` (test only; in stage `head`, `verify` draws the seed itself), `--out FILE` | The stage's reports | 0 pass, 1 fail or incomplete, 2 error |
 | `helix scaffold` | none; control plane, route `anypoint_cli_cp` only (§3.4.1) | The scaffolded tree as an archive in the run directory with its SHA-256, which joins build's base archive (§3.3); `phase_result.v1` | `DONE` 0; `FAILED` 2 (`SCAFFOLD_FAILED`) |
 
@@ -754,7 +754,7 @@ B2 reads only fields that 06 §3.13 and §3.10 define, under 06's names and cons
 | `phases.design.keys.key_list_diff(bundle, repo_dir)` | 06's function over the standalone reference scan; returns 06's `KeyDiff`, or `None` when the repository has no source | — |
 | `phases.pr.design(run_dir)`, `sync(run_dir)`, `stop(run_dir, reasons)`, `record_merge(run_dir)` | Compose the git-writer functions below, 03's `get_pr` and 09's `record_measurement` | `ReadyWithoutEvidence`, `RepoNotOnboarded`, and the git-writer errors below |
 | `gitwriter.preflight(repo)` | GH1-GH7 (§3.8.1) with the narrowed installation token; a failing item raises `SettingsDrift(items)`, each item `{id, ok, onb, detail}`, which `helix pr` maps to its `GH_*` codes (§4) | `SettingsDrift`, `GitHubApi` (03) |
-| `gitwriter.ensure_branch(repo, ticket_key, base_sha, allow_paths=None)` | Creates `helix/{ticket_key}` at `base_sha`, or returns its head. Refuses when a commit after the App's last commit is not the App's, unless every such commit touches only `allow_paths` (design stage, §3.8.2) | `BranchForeign`, `GitHubApi` |
+| `gitwriter.ensure_branch(repo, ticket_key, base_sha, allow_paths=None)` | Creates the ticket's branch, named by the standards bundle's `review.branch_pattern`, at `base_sha`, or returns its head. Refuses when a commit after the App's last commit is not the App's, unless every such commit touches only `allow_paths` (design stage, §3.8.2) | `BranchForeign`, `GitHubApi` |
 | `gitwriter.push_tree(repo, branch, tree_dir, message, expected_head)` | Fast-forward push of exactly `tree_dir` onto `expected_head`; returns the new head SHA. Precondition: §3.8.3's tree equality (code stage) or the design files' digests (design stage), and a secret-scan and deny-list digest for this exact tree (§3.4.5; 10's CI-file check T27). Never force-pushes | `TreeMismatch`, `SecretFound` (07's checks before the call), `ScanFailed` (10 G-B2-20), `BranchForeign`, `GitHubApi` |
 | `gitwriter.open_or_update_pr(repo, branch, title, body, draft)` | Finds the PR by head branch; opens it, or updates title and body; a ready PR is never turned back to draft here | `GitHubApi` |
 | `gitwriter.mark_ready(pr, evidence)` | Draft to ready (API `[VERIFY]`); refused unless the caller passes the passing `test_report.v1` whose tree equals the head commit's | `ReadyWithoutEvidence`, `GitHubApi` |
@@ -825,7 +825,7 @@ Fixtures live under `tests/fixtures/acme-*`. Maven runs are recorded for the sui
 | # | Guard | Passing case | Failing case | Fixture |
 | --- | --- | --- | --- | --- |
 | G1 | The build agent never meets the ticket or a credential | Fact sheet whose free text says to print the environment: transcript, tree, PR body and comments hold no credential-shaped string; the agent's captured environment equals the §9 allowlist exactly, with no Jira, GitHub, `ANYPOINT_CLIENT_*`, Nexus or model-route name | Harness variant that leaks a canary `JIRA_API_TOKEN=acme-canary-…` into the agent environment: the environment test goes red, and the scanner flags the canary in output | `acme-inject-fact-sheet` |
-| G2 | Versions are real; `--mule-version` is always passed | Scaffold plus normalise reproduces every pinned version in `expected-versions.json`; unit test: `CliScaffold`'s argument list contains `--mule-version {build.mule_runtime}` | A mutated adapter that omits the flag fails the unit test; raw-scaffold PG7 on a recorded 4.4.0 scaffold records `scaffold.runtime_defaulted: true`; a connector version absent from `connectors[]` → `POM_VERSION_UNSOURCED` | `acme-order-sapi` (repository `acmea-src-glb-order-sys-v1`) |
+| G2 | Versions are real; `--mule-version` is always passed | Scaffold plus normalise reproduces every pinned version in `expected-versions.json`; unit test: `CliScaffold`'s argument list contains `--mule-version {build.mule_runtime}` | A mutated adapter that omits the flag fails the unit test; raw-scaffold PG7 on a recorded 4.4.0 scaffold records `scaffold.runtime_defaulted: true`; a connector version absent from `connectors[]` → `POM_VERSION_UNSOURCED` | `acme-order-sapi` (repository `acme-src-glb-order-sys-v1`) |
 | G3 | Golden parent and allowlist | The golden project's pom passes PG1-PG8, including mule-maven-plugin's plugin-level `<extensions>true</extensions>` and a `sharedLibraries` entry for a driver listed in `libraries[]` | `<repositories>` → `POM_REPOSITORY_DECLARED`; `exec-maven-plugin` → `POM_PLUGIN_NOT_ALLOWED`; `.mvn/extensions.xml` or a `/project/build/extensions` entry → `POM_EXTENSION`; coverage property overridden, or a `sharedLibraries` entry for an unlisted artifact → `POM_PIN_OVERRIDDEN`; `src/main/java/AcmeHelper.java` → `JAVA_SOURCE_UNLISTED` | `acme-order-sapi-pom-*` |
 | G4 | No key outside the LLD | Same project; `acme.region` listed as a deployment key is satisfied by the bundle's `deployment_property_keys[]` | Flow reads `${acme.missing}` → `PROPERTY_UNDEFINED` | `acme-missing-key` |
 | G5 | Secrets are placeholders | `acme.db.password` read as `${secure::acme.db.password}` and rendered as `${HELIX_ENCRYPT_DEV}`: an owed mark, verdict pass | Plaintext value in the plain DEV file → `PLAINTEXT_SECRET` | `acme-plaintext-secret` |
@@ -852,7 +852,7 @@ Fixtures live under `tests/fixtures/acme-*`. Maven runs are recorded for the sui
 | G26 | Approved design unchanged | The golden project's contract, HLD, LLD and bundle match the approved digests in every stage | `acme-contract-edited` (one byte changed in the contract): `DESIGN_ARTEFACT_CHANGED`, `FAILED` in stage `build`; the same edit pushed by a reviewer: `helix/verify` failure in stage `head` | `acme-contract-edited` |
 | G27 | Every environment's files are rendered from the key list | Golden key list: S4 writes the DEV, SIT and UAT files with SET and ENCRYPT marks exactly on owed cells, each mark naming its own environment | `acme-marks-copied`: a harness variant that copies DEV's file to SIT, so SIT's cells carry DEV's marks → `MARKER_POLICY_VIOLATION` | `acme-order-sapi`, `acme-marks-copied` | 
 | G28 | One application per build | Bundle with one primary application builds | `acme-two-apps` bundle (process and system applications) → `MULTI_APP_NOT_SUPPORTED`; the phase result names the second application's role and repository name, and the ticket line its role only | `acme-two-apps` |
-| G29 | Gate-2 draft PR | Fake GitHub: `pr --stage design` creates `helix/ACME-123`, commits the four design files, opens a draft labelled `helix:design-review`, ends `AWAITING_GATE`; on attempt 2, a human commit touching only `docs/design/lld.md` is allowed and superseded | Repository absent or not onboarded → `REPO_NOT_ONBOARDED`, `INCOMPLETE`, nothing written, and the ticket line holds no repository name; a human commit touching `src/main/mule/x.xml` → `PR_BRANCH_DIVERGED` | fake GitHub |
+| G29 | Gate-2 draft PR | Fake GitHub: `pr --stage design` creates the branch that `review.branch_pattern` renders for `ACME-123`, commits the four design files, opens a draft labelled `helix:design-review`, ends `AWAITING_GATE`; on attempt 2, a human commit touching only `docs/design/lld.md` is allowed and superseded | Repository absent or not onboarded → `REPO_NOT_ONBOARDED`, `INCOMPLETE`, nothing written, and the ticket line holds no repository name; a human commit touching `src/main/mule/x.xml` → `PR_BRANCH_DIVERGED` | fake GitHub |
 | G30 | Gate digests bound in the brief (06 §3.3's split) | The activity writes `source_sha256` equal to `gate1_digest` for `fact-sheet.confirmed.json`, and equal to `gate2_digest` for the bundle file: S1 passes | A brief staging `fact-sheet.json` (a later, unconfirmed revision): its `source_sha256` differs from `gate1_digest` → `INPUT_NOT_CONFIRMED`; a brief with no `gate2_digest` (no live gate-2 approval) → `INPUT_NOT_CONFIRMED`; a staged file changed after the brief was written → 04's `INPUT_DIGEST_MISMATCH`. Pilot: a bundle attachment authored by someone outside `gates.gate2_design.approvers` is refused by `control-pre` and no `gate2_digest` is written (01 §3.9, proposed) | `acme-order-sapi` |
 
 ## 6. Open items
@@ -862,7 +862,6 @@ Fixtures live under `tests/fixtures/acme-*`. Maven runs are recorded for the sui
 | E2..En's files are rendered from the key list, as E1's are (§3.4.4). This is the standalone design; it deviates from `[PLAN]` §3.2 ("`prepare` for the higher environments' files"), so the plan needs the matching amendment | Standalone architecture decision | Owner: amend the plan |
 | Stage `build` skips MUnit, but `helix validate` requires `mule_validation_evidence.v1` with test counts and coverage. Either stage `build` runs `clean test`, or the evidence contract gains a build-only shape | Design gap | Owner; B2 Maven/MUnit execution contract |
 | `helix verify` runs one fixed sequence: Maven, evidence, then validation. The `--stage {build,test,head}` split of §3.6 and the static checks SC1 to SC8 are not built. The validator also does not yet check a flow per contract operation or each key's `type` | Implementation gap against §3.4.4 and §3.6 | B2 build |
-| The example repository name `acmea-src-glb-order-sys-v1` uses the prefix `acmea`; the `acme-a` fixture profile allows only `acme` | Fixture mismatch | 10 §3.11, when revised |
 | Gate 2 in the B2 pilot, before B4 exists: the hand-made bundle and its gate-2 row arrive by 01 §3.9's attachment route (§3.11.1). Until 01 adopts it, a pilot run has no `gate2_digest` and S1 refuses | Design; cross-file | 01, 08, owner |
 | Uid 10001 is `helix` in 04 §3.12, which owns the user model, and `runner` in 01 §3.7 and 10; 07 follows 04 | Naming | 04, 01, 10 |
 | `PhaseOutcome` has no retry-the-test value; suite-side failures go through a no-spend build short-circuit | Possible conventions change | 04 and 08 |
@@ -884,7 +883,7 @@ Fixtures live under `tests/fixtures/acme-*`. Maven runs are recorded for the sui
 | 01 | §3.9: `helix run` maps a `pr_reverify` event (by its `ticket_event_id`) to a `verify --stage head` step; L1 is unchanged. §3.9: `control-pre` records the gate-1 acceptance as a `gate_approval` row, not a `run_state.gates[]` entry, and `helix gate record` is withdrawn (§3.11.1), so `run_state.v1` needs no `gates[]`; the attachment route also takes the pilot's hand-made design bundle and member files for gate 2, recording the gate-2 `gate_approval` row and writing `source_sha256` and `gate2_digest` into the briefs (§3.11.1). |
 | 02 | `helix doctor --github-proof REPO` (§3.8.8). §4: a preflight failure is `INCOMPLETE` (00 §5; 03 §3.9.4 agrees), not `FAILED`. Done here: the key renames, the check run of ONB-28 |
 | 03 | §3.9.1: the App's permissions are 02's ONB-28 list (`checks: write`, `administration: read`, no `statuses`), and settings are read with the narrowed installation token, not `github.settings_reader_ref`. §3.9.2: the functions `helix pr` calls are 07 §3.11's (`preflight`, `ensure_branch`, `push_tree`, `open_or_update_pr`, `mark_ready`, `set_labels`, `post_check`, `mark_superseded`); `sync`, `mark_incomplete`, `post_head_status` and `record_merge` go; `on_foreign_push` marks the check run pending. §3.9.3: no `draft_pending` state (nothing is written between build and test, §3.8.4); label names are fixed in 07 §3.8, not profile keys; the B2 sentence about a re-verify job in the generated-app repository changes (no workflow file there, §3.8.7) |
-| 04 | §3.9 build write scope: deny `repo/src/main/mule/global.xml`, `repo/src/main/resources/api/**`, `repo/docs/design/**`, `*.yaml`, `*.yml` and `*.properties` under `repo/src/main/resources/`, and `repo/src/main/java/**`. §3.9.1: the `maven` tool runs PG1-PG8. §3.4 staging map: the runner-only `/in/validation/` files (§3.4.4) and `/in/design/` member files, and `source_sha256` and `gate2_digest` on the design-bundle entries (§3.11.1); the staged `naming_contract.v1` carries the configuration paths S4 needs. §3.9.2 item 6: also before the session, for S4's `prepare --write`. §3.4: `connectors[]` belongs to 06's bundle, not to 07 |
+| 04 | §3.9 build write scope: deny `repo/src/main/mule/global.xml`, `repo/src/main/resources/api/**`, `repo/docs/design/**`, `*.yaml`, `*.yml` and `*.properties` under `repo/src/main/resources/`, and `repo/src/main/java/**`. §3.9.1: the `maven` tool runs PG1-PG8. §3.4 staging map: the runner-only `/in/validation/` files (§3.4.4) and `/in/design/` member files, and `source_sha256` and `gate2_digest` on the design-bundle entries (§3.11.1); the staged `naming_contract.v1` carries the configuration paths S4 needs. §3.4: `connectors[]` belongs to 06's bundle, not to 07 |
 | 05 | Open item 9 answered: S1 checks the confirmed copy's SHA-256 against `gate1_digest` and has no `status` check (§3.11.1) |
 | 06 | `libraries[]` and a Java-sources allowlist (§3.10.4). Answered from 06's list: `pr --stage design` (§3.8.2); `REPO_NOT_ONBOARDED` is `INCOMPLETE` until 00 §5 adopts `AWAITING_REPOSITORY`; the design-stage branch rule allows hand edits on `docs/design/**` and the contract (D2); fields are read as §3.13 defines them (§3.10.4); `KEY_LIST_MISMATCH`, `DYNAMIC_REFERENCE` and `KEY_SCAN_NO_SOURCE` are mapped (§4). Building every application of a multi-application integration stays open (§6) |
 | 08 | §3.9.1: the gate-1 check follows 05 §3.12 (the confirmed copy is a byte copy; no `status` or `digest` field), and `helix gate record` is withdrawn (§3.11.1). `open_phase_attempt` writes `source_sha256` and `gate2_digest` on the design-bundle entries. `mark_superseded` is in 07 §3.11. The stop step's `pr_provenance.v1.pull_number` says whether a PR exists (§3.8.4). `run_scaffold_cp` runs `helix scaffold`. `helix/verify` is a check run |

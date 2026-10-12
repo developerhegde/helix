@@ -128,8 +128,8 @@ testing:
   minimum_resource_coverage: 50
   minimum_flow_coverage: 50
 review:
-  branch_pattern: "feature/{ticket}-{slug}"
-  commit_pattern: "{ticket}: {summary}"
+  branch_pattern: "feature/{ticket_key}-{slug}"
+  commit_pattern: "{ticket_key}: {summary}"
   approvals: 1
   hotfix_approvals: 2
 rules:                                   # the registry: one entry per approved rule

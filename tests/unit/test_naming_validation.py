@@ -221,6 +221,11 @@ class DeploymentPropertiesLayoutTest(NamingValidationTest):
         for change in ({"layout": "acme-unknown"}, {"environment_file": "config-{environment}.yaml"}):
             with self.assertRaises(NamingInvalid):
                 compile_contract({**_NAMING, "configuration": {**PIPELINE.configuration, **change}})
+        # A client whose deployed names carry no environment part still renders and parses.
+        application = {**_NAMING["application"], "deployed": {"parts": _NAMING["application"]["repository"]["parts"]}}
+        plain = compile_contract({**_NAMING, "application": application})
+        self.assertEqual(plain.render_deployed(PARTS, "DEV"), NAME)
+        self.assertEqual((dict(plain.parse_deployed(NAME)[0]), plain.parse_deployed(NAME)[1]), (PARTS, None))
 
     # The inherited cases below assert the environment-files layout; they do not apply to this one.
     test_contract_binding = test_application_names = test_production_environment_is_refused = None

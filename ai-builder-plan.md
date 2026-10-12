@@ -1,4 +1,5 @@
 # Helix — from a ticket to a pull request: every artefact drafted, four signatures human
+> Amended by the standalone decisions of 2026-10-09 and 2026-10-12: see docs/architecture/plan-amendments.md. Where this document and the amendments differ, the amendments govern.
 
 Plan written 2026-10-08, from the Meridian tree at `develop` @ `4a0c34e` (v1.8.1, PR #105), for a second product beside it. The owner opened the brainstorm on 2026-10-07 — *agents that take a requirement from Jira or an email, clarify it on the same channel, write the HLD and LLD, build the Mule application, write the MUnit suite, open a pull request, and later deploy* — had it researched the same day (skeptic-checked, with a critic's fifteen fixes applied here), answered four questions on 2026-10-08, and asked for *"a plan document in the shape of Meridian's phase records"*. The product is **Helix**. Everything factual is from the research; where it says low confidence the clause says so, and §1 lists every such claim.
 

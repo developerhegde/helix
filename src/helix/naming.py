@@ -83,8 +83,11 @@ class NamingContract:
     def parse_repository(self, value: str) -> Mapping[str, str]:
         return self._parse(self.repository_parts, value)
 
-    def parse_deployed(self, value: str) -> tuple[Mapping[str, str], str]:
+    def parse_deployed(self, value: str) -> tuple[Mapping[str, str], Optional[str]]:
+        """The name's parts and its environment key; the key is None when the deployed form has no environment part."""
         values = dict(self._parse(self.deployed_parts, value))
+        if "environment" not in self.deployed_parts:
+            return MappingProxyType(values), None
         suffix = values.pop("environment", None)
         matches = [environment.key for environment in self.environments if environment.suffix == suffix]
         if len(matches) != 1:
