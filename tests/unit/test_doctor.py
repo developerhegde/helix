@@ -159,6 +159,16 @@ class DoctorTest(unittest.TestCase):
         self.addCleanup(os.environ.pop, pid.PROFILE_ENV_VAR, None)
         self.assertEqual(run_cli("doctor")[0], 0)
 
+    def test_directory_name_and_unknown_keys(self):
+        root = self.profile(lambda d: d.update(acme_extra=1))
+        findings = run_doctor(root, now=NOW).findings
+        self.assertEqual([(f.id, f.severity, f.path) for f in findings], [("B1-018", "warning", "acme_extra")])
+        self.assertEqual(run_cli("doctor", "--profile", root)[0], 0)
+        self.assertEqual(run_cli("doctor", "--profile", root, "--strict")[0], 1)
+        renamed = os.path.join(os.path.dirname(self.profile()), "acme-other")
+        os.rename(os.path.join(os.path.dirname(renamed), "acme-a"), renamed)
+        self.assertEqual(self.ids(renamed), ["B1-017"])
+
     def test_every_independent_defect_in_one_run(self):
         def breakage(d):
             d["client_id"] = "Acme_A"

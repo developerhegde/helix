@@ -150,6 +150,8 @@ The loader and doctor must apply the following rules in stable order. Each faile
 | B1-014 | The profile contains no plaintext secret based on key-name and value-shape detection. A finding must name the field path but never echo the value. | error |
 | B1-015 | The `naming` block compiles to a valid `naming_contract.v1` under the grammar, environment and configuration-path rules of `b2-naming-and-environment-contract.md`, with at least two non-production environments. | error |
 | B1-016 | The `standards` reference names a safe relative path inside the profile directory, and the file there is a `client_standards_bundle.v1` whose SHA-256, version and `client_id` match the profile and which carries approval metadata. | error |
+| B1-017 | `client_id` equals the name of the profile directory. | error |
+| B1-018 | Every top-level key is part of the schema. An unknown key is reported and ignored, so the schema can grow by addition while a misspelt key is still seen. | warning |
 
 The implementation must define a local, versioned policy table for provider/residency compatibility and production-like environment aliases. It must record the policy-table version in doctor output.
 
@@ -210,6 +212,7 @@ Claude Code must implement automated tests for:
 11. Proof that doctor makes no network call, does not resolve a vault reference, and does not import `.env` values into its process environment.
 12. A missing or invalid naming block, and one with fewer than two non-production environments, producing B1-015.
 13. A standards bundle that is missing, has a different digest, names another client or version, lacks approval metadata, or sits at a path outside the profile directory, producing B1-016.
+14. A profile directory whose name differs from `client_id` producing B1-017, and an unknown top-level key producing a B1-018 warning that fails only under `--strict`.
 
 Fixtures must use only synthetic `acme-*` values. No real tenant names, account identifiers, URLs, emails, tokens, or secrets may enter the repository.
 

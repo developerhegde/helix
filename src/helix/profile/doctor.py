@@ -33,6 +33,8 @@ JIRA_STATUSES = ("needs_info", "requirement_review", "design_review")
 DESIGN_KEYS = ("contract_format", "governance_ruleset", "logging")
 GATES = ("requirement", "design", "merge", "deploy")
 
+KNOWN_KEYS = frozenset({"schema_version", "client_id", "model_route", "data_handling", "jira", "github", "vault",
+                        "anypoint", "design", "naming", "standards", "gates"})
 CLIENT_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 PROJECT_KEY_RE = re.compile(r"^[A-Z][A-Z0-9]+$")
 VAULT_REF_RE = re.compile(r"^vault://[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+$")
@@ -58,6 +60,8 @@ REMEDIATION = {
     "B1-014": "Remove the value, keep it in the vault, and leave only a vault:// reference in the profile.",
     "B1-015": "Set a valid standalone naming block with at least two non-production environments.",
     "B1-016": "Reference an approved local client_standards_bundle.v1 with the matching version and SHA-256 digest.",
+    "B1-017": "Name the profile directory after client_id, or correct client_id.",
+    "B1-018": "Remove the key or correct its spelling; unknown keys are not read.",
 }
 
 
@@ -342,6 +346,11 @@ def _check_profile(doc: Dict[str, Any], c: _Collector, policy: Policy, now: date
             load_standards(profile_dir, client_id, reference)
         except StandardsInvalid:
             c.add("B1-016", "standards", "Standards bundle is missing or violates client_standards_bundle.v1.")
+        if os.path.basename(os.path.normpath(profile_dir)) != client_id:
+            c.add("B1-017", "client_id", "client_id differs from the profile directory's name.")
+    for key in doc:
+        if key not in KNOWN_KEYS:
+            c.add("B1-018", str(key), "Key is not part of the profile schema and is ignored.", "warning")
 
     return client_id
 
@@ -373,7 +382,8 @@ def evaluate(profile_dir: str, *, now: Optional[datetime] = None,
     for path in secrets.scan(doc) if doc is not None else ():
         c.add("B1-014", path, "Field holds what looks like a plaintext secret.")
 
-    return Report(client_id, policy.version, tuple(c.findings)), doc if supported else None
+    findings = tuple(sorted(c.findings, key=lambda finding: finding.id))  # rule order; stable within a rule
+    return Report(client_id, policy.version, findings), doc if supported else None
 
 
 def run_doctor(profile_dir: str, *, now: Optional[datetime] = None, policy: Policy = DEFAULT_POLICY) -> Report:

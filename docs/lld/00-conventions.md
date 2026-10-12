@@ -88,7 +88,7 @@ Every phase is a CLI; the GitHub Action, the Temporal activity and a terminal ru
 
 | Command | Runs in | Purpose | Owning file |
 | --- | --- | --- | --- |
-| `helix profile validate` | anywhere | Schema and completeness check of a profile | 02 |
+| `helix profile validate` | — | Withdrawn: the offline `helix doctor` is this check (profile schema reconciliation, decision 12) | 02 |
 | `helix doctor` | control plane | All onboarding checks, numbered | 02 |
 | `helix discover` | control plane | Exchange and connector discovery through explicit client adapters | 05 |
 | `helix intake-prepare` | control plane | Classifies the wake and writes intake's inputs from the receiver's snapshot; no Jira call | 05 |

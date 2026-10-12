@@ -554,7 +554,7 @@ The plan requires, per repository, a real pull request approved only by the bot 
 | P1 | An operator test account, not the App and not a gate-3 approver, opens a proof PR from `helix-proof/{date}` changing only `docs/helix-proof.md`. The operator does this by hand; the account's credential never reaches Helix |
 | P2 | The proof client, which is not the git writer and whose allowlist holds exactly `POST /repos/{owner}/{repo}/pulls/{number}/reviews` with event `APPROVE` for that one PR number plus `GET` of that PR (API `[VERIFY]`), submits one approval as the App |
 | P3 | It reads the PR's mergeability (field, for example `mergeable_state`, `[VERIFY]`) and expects it blocked |
-| P4 | It records the PR number, the mergeability result and the date in 02's `github.repositories[].bot_approval_proof {pull_request, recorded_on}`; where that record is kept is open, because Helix no longer writes to the profile (02 §6), and in the done note. It writes no chain event: the proof runs in the doctor, outside any run (09 §3.4) |
+| P4 | It records the PR number, the mergeability result and the date as a row of the Helix store's `onboarding_evidence` table (profile schema reconciliation, decision 6), never in the profile, and in the done note. It writes no chain event: the proof runs in the doctor, outside any run (09 §3.4) |
 | P5 | The proof PR stays open and unmerged, so 02's ONB-31 re-reads it on every doctor run and expects it still blocked; a closed or mergeable proof PR fails ONB-31, and the proof is run again (02) |
 
 If the PR shows mergeable after the App-only approval, the proof fails: nothing is recorded, `GH_PROOF_MISSING` stays set, and preflight refuses every PR write to that repository.
