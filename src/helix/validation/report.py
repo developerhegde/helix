@@ -7,6 +7,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Iterable
 
+from ..naming import LAYOUT_DEPLOYMENT_PROPERTIES
 from . import contracts, design_binding, evidence, naming_policy, pom_policy, project_policy, property_policy, reference_scan
 
 # A required check that could not run; alone, these make the verdict incomplete rather than fail.
@@ -72,14 +73,15 @@ def validate(project_dir: str, bundle: dict[str, Any], policy: dict[str, Any],
     expected_standards_digest = policy.get("standards_bundle_digest")
     if expected_standards_digest is not None and standards_digest != expected_standards_digest:
         raw_findings.append(("STANDARDS_BUNDLE_MISMATCH", "Design bundle is not bound to the staged standards bundle."))
-    naming_digest = None
+    contract = None
     if naming is not None:
-        naming_digest, naming_findings = naming_policy.check(project_dir, bundle, policy, naming)
+        contract, naming_findings = naming_policy.check(project_dir, bundle, policy, naming)
         raw_findings.extend(naming_findings)
+    base_marks = contract is not None and contract.layout == LAYOUT_DEPLOYMENT_PROPERTIES
     raw_findings.extend(design_binding.check(project_dir, bundle))
     raw_findings.extend(pom_policy.check(project_dir, policy))
     raw_findings.extend(project_policy.check(project_dir, policy))
-    raw_findings.extend(property_policy.check(project_dir, bundle, policy, scan))
+    raw_findings.extend(property_policy.check(project_dir, bundle, policy, scan, base_marks_allowed=base_marks))
     maven_evidence, evidence_findings = evidence.check(project_dir, policy)
     raw_findings.extend(evidence_findings)
     if policy.get("project", {}).get("forbid_java_interop") and scan.java_interop:
@@ -101,7 +103,7 @@ def validate(project_dir: str, bundle: dict[str, Any], policy: dict[str, Any],
         tuple(sorted(_defined_keys(project_dir))),
         tuple(sorted(str(item) for item in bundle.get("deployment_property_keys", ()) if isinstance(item, str))),
         tuple(sorted(scan.mappings)),
-        naming_digest,
+        contract.digest if contract is not None else None,
     )
 
 

@@ -13,7 +13,10 @@ _MARKER = re.compile(r"\$\{(?:[A-Z][A-Z0-9]*_)?(SET|ENCRYPT)_([A-Z][A-Z0-9_]*)\}
 _PROPERTY_LINE = re.compile(r"^\s*([A-Za-z][A-Za-z0-9_.-]*)\s*[:=]\s*(.*?)\s*$")
 
 
-def check(project_dir: str, bundle: dict[str, Any], policy: dict[str, Any], scan: SourceScan) -> list[tuple[str, str]]:
+def check(project_dir: str, bundle: dict[str, Any], policy: dict[str, Any], scan: SourceScan, *,
+          base_marks_allowed: bool = False) -> list[tuple[str, str]]:
+    """``base_marks_allowed`` is the deployment-properties layout, where the base file holds the lowest
+    environment's marks; the naming checks then decide which base cells may hold one."""
     failures: list[tuple[str, str]] = []
     configuration = policy.get("configuration", {})
     allowed_sources = tuple(configuration.get("allowed_property_sources", ()))
@@ -42,7 +45,7 @@ def check(project_dir: str, bundle: dict[str, Any], policy: dict[str, Any], scan
     secret_keys = {key for key, item in properties.items() if item.get("class") == "secret"}
     for path, key, value in secret_values:
         marked = _MARKER.search(value)
-        if _is_base_or_test(path, allowed_sources) and marked:
+        if marked and (path.startswith("src/test/") or (path in allowed_sources and not base_marks_allowed)):
             failures.append(("MARKER_POLICY_VIOLATION", "Base or test configuration contains an environment marker."))
         # Test files hold fixtures, so a secret-class key may carry a plain value there, never a secret-shaped one.
         plain_secret_key = key in secret_keys and not path.startswith("src/test/")
@@ -88,10 +91,6 @@ def _configuration_values(project_dir: str) -> tuple[set[str], dict[str, tuple[s
                         markers[key] = (marker.group(1), marker.group(2))
                     values.append((relative, key, value))
     return defined, markers, values
-
-
-def _is_base_or_test(path: str, allowed_sources: tuple[str, ...]) -> bool:
-    return path.startswith("src/test/") or path in allowed_sources
 
 
 def _unique(values: list[tuple[str, str]]) -> list[tuple[str, str]]:

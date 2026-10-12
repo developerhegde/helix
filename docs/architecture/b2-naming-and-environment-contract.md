@@ -116,7 +116,31 @@ The example is illustrative. A client may use a different grammar, provided it s
 
 ### Layout
 
-The `configuration` block above describes the `environment_files` layout. The standards bundle's `configuration.layout` may instead be `deployment_properties` (standards mapping decision D1), where the application holds only a base file and one secure file and the pipeline supplies each environment's values. The fields for that layout are not yet defined in this contract.
+`configuration.layout` chooses where environment values live. It is part of the contract, so it is bound by the contract digest.
+
+| | `environment_files` (default) | `deployment_properties` |
+| --- | --- | --- |
+| Files in the application | The base file, and one plain and one secure file per environment | The base file and one secure file |
+| Fields | `directory`, `base_file`, `environment_file`, `secure_environment_file`, `test_directory`, `test_file`, `secure_test_file` | `directory`, `base_file`, `secure_file`, `test_directory`, `test_file`, `secure_test_file` |
+| Environment-specific key | `${HELIX_SET_<E>}` in each environment's file | `${HELIX_SET_<E1>}` in the base file, where E1 is the lowest environment |
+| Secret key | `${HELIX_ENCRYPT_<E>}` in each environment's secure file | `${HELIX_ENCRYPT_<E1>}` in the secure file |
+| Other environments' values | In their own files, filled by the key holder | Supplied by the client's pipeline as deployment properties; never in the repository |
+| Keys per environment | A key may list only some environments | Every environment-specific and secret key lists every environment (`KEY_ENVIRONMENTS_UNEVEN`) |
+
+```yaml
+configuration:
+  layout: deployment_properties
+  directory: src/main/resources
+  base_file: config.yaml
+  secure_file: config-secure.yaml
+  test_directory: src/test/resources
+  test_file: config-munit.yaml
+  secure_test_file: config-secure-munit.yaml
+```
+
+`directory` may be the resource root itself. Only files directly in it count as property files, so the API contract and scripts in sub-folders are not mistaken for one. A contract without `layout` is `environment_files`, and its digest is unchanged from before this field existed.
+
+In `deployment_properties`, the base file's entry for an environment-specific key is a mark, not a ready value: the key holder fills it for the lowest environment after merge. This keeps the rule that an unfinished application cannot start. It differs from the reference standard's wording, "a default for every property", only in that the default arrives after merge.
 
 ## Helix-owned interface
 

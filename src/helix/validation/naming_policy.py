@@ -10,7 +10,7 @@ import os
 import re
 from typing import Any, Mapping, Optional, Sequence
 
-from ..naming import NamingContract, NamingInvalid, load_contract
+from ..naming import LAYOUT_DEPLOYMENT_PROPERTIES, NamingContract, NamingInvalid, load_contract
 
 _PROPERTY_SOURCE = re.compile(r'<(?:configuration-properties|secure-properties:config)\b[^>]*?\bfile\s*=\s*"([^"]*)"')
 _PROPERTY_LINE = re.compile(r"^\s*([A-Za-z][A-Za-z0-9_.-]*)\s*[:=]\s*(.*?)\s*$")
@@ -22,8 +22,8 @@ Findings = list[tuple[str, str]]
 
 
 def check(project_dir: str, bundle: Mapping[str, Any], policy: Mapping[str, Any],
-          staged: Any) -> tuple[Optional[str], Findings]:
-    """Return the proven contract digest, or None, and the findings."""
+          staged: Any) -> tuple[Optional[NamingContract], Findings]:
+    """Return the proven contract, or None, and the findings."""
     try:
         contract = load_contract(staged)  # NAM-001
     except NamingInvalid:
@@ -35,7 +35,7 @@ def check(project_dir: str, bundle: Mapping[str, Any], policy: Mapping[str, Any]
     _applications(bundle, contract, environments, failures)
     if environments:
         _configuration(project_dir, bundle, policy, contract, environments, failures)
-    return contract.digest, list(dict.fromkeys(failures))
+    return contract, list(dict.fromkeys(failures))
 
 
 def _environments(bundle: Mapping[str, Any], contract: NamingContract, failures: Findings) -> tuple[str, ...]:
@@ -109,53 +109,74 @@ def _applications(bundle: Mapping[str, Any], contract: NamingContract, environme
 
 def _configuration(project_dir: str, bundle: Mapping[str, Any], policy: Mapping[str, Any],
                    contract: NamingContract, environments: Sequence[str], failures: Findings) -> None:
-    """NAM-005 (files and property sources) and NAM-006 (marks), for the environment-files layout."""
+    """NAM-005 (files and property sources) and NAM-006 (marks), for either layout.
+
+    ``cells`` maps each expected file to the marks it must hold: key -> (kind, environment).
+    A key that is absent from a file's cells must not hold a mark there.
+    """
     keys = {item["key"]: item for item in bundle.get("keys", ())
             if isinstance(item, dict) and isinstance(item.get("key"), str)}
 
-    def owed(kind: str, environment: str) -> set[str]:
-        return {key for key, item in keys.items()
-                if item.get("class") == kind and environment in (item.get("environments") or ())}
-
-    first = contract.configuration_paths(environments[0])
-    expected: dict[str, Optional[tuple[str, str, set[str]]]] = {first.base: None}
-    for key in environments:
-        paths = contract.configuration_paths(key)
-        expected[paths.environment] = ("SET", key, owed("env_specific", key))
-        if owed("secret", key):
-            expected[paths.secure_environment] = ("ENCRYPT", key, owed("secret", key))
-
-    present = _config_files(project_dir, contract.configuration["directory"])
-    if set(expected) - present:
-        failures.append(("CONFIGURATION_PATH_MISMATCH", "A configuration file the naming contract requires is missing."))
-    if present - set(expected):
-        failures.append(("CONFIGURATION_PATH_MISMATCH", "A configuration file sits at a path the naming contract does not render."))
+    def owed(kind: str, environment: Optional[str] = None) -> set[str]:
+        return {key for key, item in keys.items() if item.get("class") == kind
+                and (environment is None or environment in (item.get("environments") or ()))}
 
     configuration = policy.get("configuration", {})
-    selector = "${" + str(configuration.get("environment_selector", "env")) + "}"
-    suffixes = [item.suffix for item in contract.environments if not item.production]
-    sources = {first.base}
-    for key in contract.allowed_environment_keys():
-        paths = contract.configuration_paths(key)
-        sources.update((paths.environment, paths.secure_environment))
+    first = contract.configuration_paths(environments[0])
+    cells: dict[str, dict[str, tuple[str, str]]] = {}
+    exact = set()  # files that hold their owed keys and nothing else
+    if contract.layout == LAYOUT_DEPLOYMENT_PROPERTIES:
+        # One base and one secure file. Their marks are the lowest environment's defaults;
+        # every other environment's value is supplied at deployment, so every key is owed everywhere.
+        lowest = next(key for key in contract.allowed_environment_keys() if key in environments)
+        cells[first.base] = {key: ("SET", lowest) for key in owed("env_specific")}
+        if owed("secret"):
+            cells[first.secure] = {key: ("ENCRYPT", lowest) for key in owed("secret")}
+            exact.add(first.secure)
+        if any(set(keys[key].get("environments") or ()) != set(environments)
+               for key in owed("env_specific") | owed("secret")):
+            failures.append(("KEY_ENVIRONMENTS_UNEVEN", "An environment-specific or secret key is not owed in every environment."))
+        sources, selector, suffixes = set(cells) | {first.secure}, None, []
+    else:
+        cells[first.base] = {}
+        sources = {first.base}
+        for key in environments:
+            paths = contract.configuration_paths(key)
+            cells[paths.environment] = {name: ("SET", key) for name in owed("env_specific", key)}
+            exact.add(paths.environment)
+            if owed("secret", key):
+                cells[paths.secure_environment] = {name: ("ENCRYPT", key) for name in owed("secret", key)}
+                exact.add(paths.secure_environment)
+        for key in contract.allowed_environment_keys():
+            paths = contract.configuration_paths(key)
+            sources.update((paths.environment, paths.secure_environment))
+        selector = "${" + str(configuration.get("environment_selector", "env")) + "}"
+        suffixes = [item.suffix for item in contract.environments if not item.production]
+
+    present = _config_files(project_dir, contract.configuration["directory"])
+    if set(cells) - present:
+        failures.append(("CONFIGURATION_PATH_MISMATCH", "A configuration file the naming contract requires is missing."))
+    if present - set(cells):
+        failures.append(("CONFIGURATION_PATH_MISMATCH", "A configuration file sits at a path the naming contract does not render."))
+
     for value in _property_sources(project_dir):
-        rendered = [value.replace(selector, suffix) for suffix in suffixes] if selector in value else [value]
+        rendered = [value.replace(selector, suffix) for suffix in suffixes] if selector and selector in value else [value]
         if any("${" in item or _RESOURCES + item not in sources for item in rendered):
             failures.append(("CONFIGURATION_PATH_MISMATCH", "Mule configuration loads a property source outside the naming contract."))
             break
 
     prefix = configuration.get("marker_prefix")
-    for path, owed_cells in expected.items():
+    for path, owed_cells in cells.items():
         if path not in present:
             continue
         values = _values(project_dir, path)
-        if owed_cells is None:
-            if any(_MARK.search(value) for value in values.values()):
-                failures.append(("MARKER_POLICY_VIOLATION", "Base configuration contains an environment marker."))
-            continue
-        kind, key, owed_keys = owed_cells
-        if set(values) != owed_keys or any(not _is_mark(values[name], prefix, kind, key) for name in owed_keys):
-            failures.append(("MARKER_POLICY_VIOLATION", "An environment file does not hold exactly its owed marks."))
+        missing = set(owed_cells) - set(values)
+        extra = set(values) - set(owed_cells) if path in exact else set()
+        wrong = [name for name, value in values.items() if name in owed_cells
+                 and not _is_mark(value, prefix, *owed_cells[name])]
+        stray = [name for name, value in values.items() if name not in owed_cells and _MARK.search(value)]
+        if missing or extra or wrong or stray:
+            failures.append(("MARKER_POLICY_VIOLATION", "A configuration file does not hold exactly its owed marks."))
     for path in (first.test, first.secure_test):
         if os.path.isfile(_absolute(project_dir, path)) and any(_MARK.search(v) for v in _values(project_dir, path).values()):
             failures.append(("MARKER_POLICY_VIOLATION", "Test configuration contains an environment marker."))
@@ -182,12 +203,11 @@ def _absolute(project_dir: str, relative: str) -> str:
 
 
 def _config_files(project_dir: str, directory: str) -> set[str]:
-    found = set()
-    for folder, _, files in os.walk(_absolute(project_dir, directory)):
-        for name in files:
-            if name.endswith(_CONFIG_SUFFIXES):
-                found.add(os.path.relpath(os.path.join(folder, name), project_dir).replace("\\", "/"))
-    return found
+    """Configuration files directly in the directory; sub-folders (the API contract, scripts) are not property files."""
+    folder = _absolute(project_dir, directory)
+    names = os.listdir(folder) if os.path.isdir(folder) else ()
+    return {f"{directory.rstrip('/')}/{name}" for name in names
+            if name.endswith(_CONFIG_SUFFIXES) and os.path.isfile(os.path.join(folder, name))}
 
 
 def _values(project_dir: str, relative: str) -> dict[str, str]:

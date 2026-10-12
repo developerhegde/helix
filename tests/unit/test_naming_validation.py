@@ -11,7 +11,7 @@ from unittest.mock import patch
 import yaml
 
 from helix import product_identity as pid
-from helix.naming import compile_contract
+from helix.naming import NamingInvalid, compile_contract
 from helix.validation import validate
 from tests.support import FIXTURE, run_cli
 from tests.unit.test_validation import POLICY as BASE_POLICY
@@ -161,6 +161,70 @@ class NamingValidationTest(unittest.TestCase):
         with patch("helix.validation.maven_runner.subprocess.run", side_effect=FileNotFoundError):
             code, output, _ = run_cli(*argv)
         self.assertEqual((code, json.loads(output)["verdict"]), (1, "incomplete"))
+
+
+with open(os.path.join(FIXTURE, pid.PROFILE_FILENAME), encoding="utf-8") as _handle:
+    _NAMING = yaml.safe_load(_handle)["naming"]
+ROOT = "src/main/resources/"
+PIPELINE = compile_contract({**_NAMING, "configuration": {
+    "layout": "deployment_properties", "directory": "src/main/resources", "base_file": "config.yaml",
+    "secure_file": "config-secure.yaml", "test_directory": "src/test/resources",
+    "test_file": "config-munit.yaml", "secure_test_file": "config-secure-munit.yaml"}})
+PIPELINE_POLICY = {**POLICY, "configuration": {"allowed_property_sources": [ROOT + "config.yaml"], "marker_prefix": "HELIX"}}
+
+
+class DeploymentPropertiesLayoutTest(NamingValidationTest):
+    """The reference standard's layout: one base and one secure file; the pipeline supplies the rest."""
+
+    def setUp(self):
+        super().setUp()
+        for relative in FILES:
+            if relative.startswith(CONFIG):
+                os.remove(os.path.join(self.project, *relative.split("/")))
+        os.rmdir(os.path.join(self.project, *CONFIG.rstrip("/").split("/")))
+        self.write(ROOT + "config.yaml", "orders.base: base\norders.host: ${HELIX_SET_DEV}\n")
+        self.write(ROOT + "config-secure.yaml", "orders.password: ${HELIX_ENCRYPT_DEV}\n")
+        self.write("src/main/mule/global.xml", '<mule><configuration-properties file="config.yaml"/>'
+                   '<secure-properties:config file="config-secure.yaml" key="${secure.key}"/></mule>\n')
+
+    def bundle(self):
+        bundle = super().bundle()
+        bundle["naming_contract_digest"] = PIPELINE.digest
+        bundle["keys"] = [item for item in bundle["keys"] if item["key"] != "env"]
+        bundle["deployment_property_keys"] = ["secure.key"]
+        return bundle
+
+    def codes(self, bundle=None, naming=None, policy=PIPELINE_POLICY):
+        return super().codes(bundle, naming or PIPELINE.to_staged(), policy)
+
+    def test_golden_project_passes_with_naming(self):
+        self.assertEqual(self.codes(), [])
+
+    def test_configuration_paths(self):
+        self.write(ROOT + "config-sit.yaml", "orders.host: ${HELIX_SET_SIT}\n")  # no environment file belongs here
+        self.assertEqual(self.codes(), ["CONFIGURATION_PATH_MISMATCH"])
+
+    def test_marks_and_secrets(self):
+        self.write(ROOT + "config.yaml", "orders.base: base\norders.host: ${HELIX_SET_SIT}\n")  # not the lowest environment
+        self.assertEqual(self.codes(), ["MARKER_POLICY_VIOLATION"])
+        self.write(ROOT + "config.yaml", "orders.base: ${HELIX_SET_DEV}\norders.host: ${HELIX_SET_DEV}\n")  # mark on an invariant key
+        self.assertIn("MARKER_POLICY_VIOLATION", self.codes())
+
+    def test_every_environment_owes_the_same_keys(self):
+        bundle = self.bundle()
+        bundle["keys"][1]["environments"] = ["DEV"]
+        self.assertEqual(self.codes(bundle), ["KEY_ENVIRONMENTS_UNEVEN"])
+
+    def test_layout_fields_and_digest_stability(self):
+        self.assertNotIn("layout", CONTRACT.as_dict()["configuration"])  # earlier contracts keep their digest
+        self.assertEqual(PIPELINE.configuration_paths("DEV").secure, ROOT + "config-secure.yaml")
+        for change in ({"layout": "acme-unknown"}, {"environment_file": "config-{environment}.yaml"}):
+            with self.assertRaises(NamingInvalid):
+                compile_contract({**_NAMING, "configuration": {**PIPELINE.configuration, **change}})
+
+    # The inherited cases below assert the environment-files layout; they do not apply to this one.
+    test_contract_binding = test_application_names = test_production_environment_is_refused = None
+    test_missing_evidence_is_incomplete = test_verify_command = None
 
 
 if __name__ == "__main__":

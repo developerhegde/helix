@@ -137,6 +137,8 @@ rules:                                   # the registry: one entry per approved 
   - {id: STD-LOG-03, strength: blocking, form: checklist, checked_by: reviewer}
 ```
 
+`configuration.layout` here records what the standard requires. The layout Helix acts on is the profile's `naming.configuration.layout`, because it is bound by the naming-contract digest; the doctor should refuse a profile where the two differ (not yet built).
+
 A rule with `checked_by: reviewer` appears in the pull request as a checklist line; Helix never marks it passed. A rule with `checked_by: helix` names the validator code that fails when it is broken, so a rule without a built check is visible as such.
 
 ## Converting prose into usable standards

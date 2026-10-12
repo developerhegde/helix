@@ -28,16 +28,16 @@ This document turns every rule of the standards document into one entry, as `cli
 
 | Status | Rules |
 | --- | --- |
-| Built | 5 |
+| Built | 8 |
 | Partly built | 7 |
 | Designed | 14 |
-| To design | 45 |
+| To design | 42 |
 | Reviewer | 16 |
 | Outside Helix | 6 |
 | Deviation | 1 |
 | **Total** | **94** |
 
-Of the 94 rules (87 Blocking, 7 Advisory), 71 are for Helix to check automatically, 16 stay with a reviewer, 6 belong to the client's pipeline or platform, and 1 is an accepted deviation in B2. Only 12 of the 71 are fully or partly built today.
+Of the 94 rules (87 Blocking, 7 Advisory), 71 are for Helix to check automatically, 16 stay with a reviewer, 6 belong to the client's pipeline or platform, and 1 is an accepted deviation in B2. 15 of the 71 are fully or partly built today.
 
 ## Naming
 
@@ -108,9 +108,9 @@ Of the 94 rules (87 Blocking, 7 Advisory), 71 are for Helix to check automatical
 
 | ID | Rule | S | Form | Checked by | Status |
 | --- | --- | --- | --- | --- | --- |
-| STD-CFG-01 | `config.yaml` holds a default for every property | B | Setting | Helix | To design (D1: `deployment_properties` layout) |
-| STD-CFG-02 | Environment values are deployment properties from the pipeline; every environment has the same keys | B | Setting | Helix | To design (D1 and D5: `deployment_properties` layout) |
-| STD-CFG-03 | Secrets live in `config-secure.yaml` and are read as `${secure::<key>}` | B | Setting | Helix | To design (D1: `deployment_properties` layout) |
+| STD-CFG-01 | `config.yaml` holds a default for every property | B | Setting | Helix | Built, with one difference: every key is defined in the base file, and an environment-specific key holds a mark the key holder fills for the lowest environment |
+| STD-CFG-02 | Environment values are deployment properties from the pipeline; every environment has the same keys | B | Setting | Helix | Built: no environment file is allowed and `KEY_ENVIRONMENTS_UNEVEN` refuses uneven keys; the pipeline's own override sets stay with the client |
+| STD-CFG-03 | Secrets live in `config-secure.yaml` and are read as `${secure::<key>}` | B | Setting | Helix | Built: one secure file, read as `${secure::<key>}` |
 | STD-CFG-04 | No hard-coded host, port, path, credential, timeout, pool size, cron, queue or flag | B | Validation: literal scan | Helix | Designed (LLD 07, `LITERAL_CONFIG_VALUE`) |
 | STD-CFG-05 | Feature flags are `feature.<name>.enabled`, default `false` | A | Validation: pattern | Helix | To design |
 | STD-CFG-06 | API Manager resources and queues are created by the pipeline; `api.id` is captured | A | Guidance | Client | Outside Helix |
@@ -180,7 +180,7 @@ Of the 94 rules (87 Blocking, 7 Advisory), 71 are for Helix to check automatical
 
 ## Next
 
-1. Design the `deployment_properties` layout (D1) in the naming contract and LLD 07 §3.4.4, and carry the branch pattern (D4) through LLD 01, 02, 03, 06 and 07, which still assume the old branch name.
+1. Carry the branch pattern (D4) through LLD 01, 02, 03, 06 and 07, which still assume the old branch name.
 2. Add the approved rules to the bundle as its `rules[]` registry, each with this document's identifier.
 3. Design the 40 *To design* rules as validator checks, starting with the POM and naming patterns, which need no new input.
 4. Regenerate the `acme-a` fixture bundle and its digest.

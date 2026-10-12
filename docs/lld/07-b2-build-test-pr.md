@@ -158,7 +158,7 @@ Plugin allowlist default: `org.mule.tools.maven:mule-maven-plugin` and `com.mule
 
 Standalone design. This section follows `docs/architecture/b2-standalone-mule-validation.md`, `b2-naming-and-environment-contract.md` and `b2-design-bundle-contract.md`: Helix renders and judges every property file itself, and no external tool writes or checks them.
 
-**Layout** (standards mapping decisions D1 and D3). This section describes the `environment_files` layout: one file per environment inside the application. The reference standard uses `deployment_properties`: one base file with a default for every property, one secure file, and each environment's values supplied by the pipeline at deployment. That second layout is decided but not yet designed here (§6). In both, the global file's name is the standards bundle's `project.mule_files.global`, `global.xml` under the reference standard.
+**Layout** (standards mapping decisions D1 and D3). The naming contract's `configuration.layout` decides where environment values live (B2 naming contract, *Layout*). The tables below describe `environment_files`, one file per environment inside the application. Under `deployment_properties`, the reference standard's layout, S4 renders only two files: the base file, holding every `invariant` key with its value and every `env_specific` key as `${HELIX_SET_<E1>}`, and one secure file, holding every `secret` key as `${HELIX_ENCRYPT_<E1>}`, where E1 is the lowest environment. The global file then loads those two files by their literal names and uses no `${env}` selector. Every other environment's values are deployment properties from the client's pipeline; the PR body lists each owed key for each environment. In both layouts the global file's name is the standards bundle's `project.mule_files.global`, `global.xml` under the reference standard.
 
 The safety-relevant files are written by the Helix code, never by the agent, so they carry no model discretion `[LLD]`: the global configuration file, the base file, every allowed environment's files and the test files are all rendered from the approved key list in S4. Flows read plain keys as `${key}` and secrets as `${secure::key}`. Each key's class is 06's `keys[].class` (§3.10.4). E1..En are the bundle's `environments[]`: the naming contract's allowed, non-production environment keys in its order, at least two.
 
@@ -213,7 +213,8 @@ The two placeholder names in these expressions (`{build.env_property}` and `secu
 | An approved key is not read by the code | fail | `PROPERTY_UNUSED` |
 | A property reference is built at run time, so it cannot be proven against the key list | fail | `DYNAMIC_PROPERTY_REFERENCE` |
 | A deployment property is written into a generated file | fail | `DEPLOYMENT_PROPERTY_WRITTEN` |
-| A mark on a cell that is not owed, an owed cell without its mark, or a mark in a base or test file | fail | `MARKER_POLICY_VIOLATION` |
+| A mark on a cell that is not owed, an owed cell without its mark, or a mark in a test file | fail | `MARKER_POLICY_VIOLATION` |
+| Under `deployment_properties`, an environment-specific or secret key that does not list every environment | fail | `KEY_ENVIRONMENTS_UNEVEN` |
 | A secret-shaped plaintext value in a configuration file | fail | `PLAINTEXT_SECRET` |
 | An approved mapping anchor is missing from the DataWeave source | fail | `MAPPING_ANCHOR_MISSING` |
 | Maven or MUnit evidence reports a failure, or coverage is below the policy's `testing.minimum_application_coverage` | fail | `MAVEN_BUILD_FAILED`, `MUNIT_FAILED`, `COVERAGE_BELOW_THRESHOLD` |
@@ -859,7 +860,6 @@ Fixtures live under `tests/fixtures/acme-*`. Maven runs are recorded for the sui
 | Item | Kind | Owner or check |
 | --- | --- | --- |
 | E2..En's files are rendered from the key list, as E1's are (§3.4.4). This is the standalone design; it deviates from `[PLAN]` §3.2 ("`prepare` for the higher environments' files"), so the plan needs the matching amendment | Standalone architecture decision | Owner: amend the plan |
-| The `deployment_properties` layout (standards mapping decision D1): which keys the base file defaults, how the single secure file is named in the naming contract, and what the validator expects when no environment file exists | Design gap | Owner; naming contract |
 | Stage `build` skips MUnit, but `helix validate` requires `mule_validation_evidence.v1` with test counts and coverage. Either stage `build` runs `clean test`, or the evidence contract gains a build-only shape | Design gap | Owner; B2 Maven/MUnit execution contract |
 | `helix verify` runs one fixed sequence: Maven, evidence, then validation. The `--stage {build,test,head}` split of §3.6 and the static checks SC1 to SC8 are not built. The validator also does not yet check a flow per contract operation or each key's `type` | Implementation gap against §3.4.4 and §3.6 | B2 build |
 | The example repository name `acmea-src-glb-order-sys-v1` uses the prefix `acmea`; the `acme-a` fixture profile allows only `acme` | Fixture mismatch | 10 §3.11, when revised |
