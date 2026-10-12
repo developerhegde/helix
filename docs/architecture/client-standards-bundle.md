@@ -83,11 +83,13 @@ testing:
   munit_version: 3.7.4
   require_concrete_assertions: true
   forbid_processor_under_test_mocks: true
-  minimum_application_coverage: 80
+  minimum_application_coverage: 75
 review:
   required_artifacts: [contract, hld, lld, test_evidence]
   checklist: []
 ```
+
+Two values are the client's to own. `project.golden_parent` names the client's own parent POM, which the client publishes and maintains; Helix pins its coordinates and never writes it. `testing.minimum_application_coverage` defaults to 75, the value in `docs/mulesoft-development-standards.md`, and a client may raise it.
 
 The schema remains deliberately narrow in its first iteration. Unknown prose must not be treated as executable policy.
 

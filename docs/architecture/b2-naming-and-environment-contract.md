@@ -42,8 +42,8 @@ naming:
       scope: [src, run]
       region: [glb, euw]
       layer: [exp, prc, sys]
-      version_pattern: "v[1-9][0-9]*"
-      name_pattern: "[a-z][a-z0-9-]{1,48}"
+    version_pattern: "v[1-9][0-9]*"
+    name_pattern: "[a-z][a-z0-9-]{1,48}"
   environments:
     - key: DEV
       suffix: dev

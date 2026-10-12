@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — B2 standalone validation foundation
+
+- `helix validate`, the `naming_contract.v1` compiler, the client standards bundle loader, and doctor rules B1-015 (naming) and B1-016 (standards bundle).
+- Isolated Maven runner and MUnit/coverage report parser producing value-free evidence.
+- Design: B2 contracts for validation, naming, Maven/MUnit execution, the standards bundle and the design bundle; LLD 07 revised to the standalone design; marks renamed to `HELIX_SET_` and `HELIX_ENCRYPT_`; default coverage minimum 75.
+
 ## Unreleased — B1 client profile and offline doctor
 
 - `helix.yaml` profile schema version 1, loader, and `helix doctor --profile DIR [--format text|json] [--strict]` with rules B1-001 to B1-014 and exit codes 0, 1, 2.
