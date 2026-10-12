@@ -62,7 +62,9 @@ class NamingContract:
 
     def render_deployed(self, parts: Mapping[str, str], environment_key: str) -> str:
         values = dict(parts)
-        values["environment"] = self._environment(environment_key).suffix
+        environment = self._environment(environment_key)
+        if "environment" in self.deployed_parts:
+            values["environment"] = environment.suffix
         return self._render(self.deployed_parts, values)
 
     def parse_repository(self, value: str) -> Mapping[str, str]:
@@ -105,6 +107,10 @@ class NamingContract:
             ],
             "configuration": dict(self.configuration),
         }
+
+    def to_staged(self) -> dict[str, Any]:
+        """The immutable per-attempt input: the canonical contract and its digest."""
+        return {**self.as_dict(), "digest": self.digest}
 
     def _environment(self, key: str) -> Environment:
         for environment in self.environments:
@@ -192,6 +198,31 @@ def compile_contract(value: Any) -> NamingContract:
     digest = hashlib.sha256(_canonical_json(canonical).encode("utf-8")).hexdigest()
     return NamingContract(separator, repository_parts, deployed_parts, MappingProxyType(allowed), name_pattern,
                           version_pattern, environments, MappingProxyType(configuration), digest)
+
+
+def load_contract(staged: Any) -> NamingContract:
+    """Rebuild a contract from its staged form and prove the digest it carries."""
+    if not isinstance(staged, dict) or staged.get("schema") != "naming_contract.v1":
+        raise NamingInvalid("staged naming contract schema is invalid")
+    application = staged.get("application")
+    if not isinstance(application, dict):
+        raise NamingInvalid("staged naming contract is incomplete")
+    contract = compile_contract({
+        "schema_version": 1,
+        "application": {
+            "separator": application.get("separator"),
+            "repository": {"parts": application.get("repository_parts")},
+            "deployed": {"parts": application.get("deployed_parts")},
+            "allowed": application.get("allowed"),
+            "name_pattern": application.get("name_pattern"),
+            "version_pattern": application.get("version_pattern"),
+        },
+        "environments": staged.get("environments"),
+        "configuration": staged.get("configuration"),
+    })
+    if staged.get("digest") != contract.digest:
+        raise NamingInvalid("staged naming contract digest does not match its content")
+    return contract
 
 
 def _mapping(value: Mapping[str, Any], key: str) -> Mapping[str, Any]:

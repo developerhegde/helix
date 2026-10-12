@@ -101,7 +101,7 @@ The control plane compiles the policy from the approved standards bundle (`proje
 
 **Marks.** A value owed after merge is written as `${HELIX_SET_<ENV>}`, and an owed secret as `${HELIX_ENCRYPT_<ENV>}`, where `<ENV>` is the naming contract's environment key. The prefix is policy data, so a product rename or a client convention changes one field and no validator code.
 
-Not yet enforced by `helix validate`: `munit_version`, `environment_selector`, `secure_property_key` and `marker_prefix` (the validator accepts any upper-case prefix today).
+`marker_prefix` and `environment_selector` are enforced when the naming contract is staged. Not yet enforced: `munit_version` and `secure_property_key`.
 
 ## Reference and property rules
 

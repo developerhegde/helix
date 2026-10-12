@@ -55,7 +55,7 @@ The validator proves `keys[]` against the generated source: every key the code r
 
 ## Not yet enforced in code
 
-`helix validate` today checks the required fields, the standards digest, the member-file digests, the key sets, the marks and the mapping anchors. It does not yet check `naming_contract_digest`, the application names and paths (NAM-001 to NAM-007), a flow per contract operation, or each key's `type` and `config_file`.
+`helix validate` checks every field above when the naming contract is staged, which `helix verify` always requires. It does not yet check a flow per contract operation, or each key's `type` and `config_file`.
 
 ## Acceptance criteria
 

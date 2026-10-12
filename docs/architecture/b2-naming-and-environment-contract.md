@@ -132,6 +132,7 @@ The `configuration` block above describes the `environment_files` layout. The st
 | `configuration_paths(environment_key) -> ConfigurationPaths` | Returns base, environment, secure-environment, and test paths. |
 | `allowed_environment_keys() -> tuple[str, ...]` | Returns only non-production environment keys, in order. |
 | `is_production(environment_key) -> bool` | Returns the declared environment classification. |
+| `to_staged() -> dict`, `load_contract(staged) -> NamingContract` | Writes the per-attempt `naming-contract.json` with its digest, and rebuilds a contract from it, refusing one whose content no longer matches the digest. |
 
 `NamingContract` exposes no mutable dict. Every caller receives canonical values and the contract digest.
 
@@ -153,8 +154,13 @@ The control plane compiles the profile's naming block before B2 begins and place
     {"key": "SIT", "suffix": "sit", "order": 20, "production": false}
   ],
   "configuration": {
-    "base_path": "src/main/resources/config/config.yaml",
-    "test_path": "src/test/resources/config/config-munit.yaml"
+    "directory": "src/main/resources/config",
+    "base_file": "config.yaml",
+    "environment_file": "config-{environment}.yaml",
+    "secure_environment_file": "config-secure-{environment}.yaml",
+    "test_directory": "src/test/resources/config",
+    "test_file": "config-munit.yaml",
+    "secure_test_file": "config-secure-munit.yaml"
   }
 }
 ```

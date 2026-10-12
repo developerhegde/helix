@@ -39,11 +39,15 @@ def check(project_dir: str, bundle: dict[str, Any], policy: dict[str, Any], scan
         allowed = expected_marker.get(key, set())
         if marker not in allowed:
             failures.append(("MARKER_POLICY_VIOLATION", "Configuration contains an unexpected environment marker."))
+    secret_keys = {key for key, item in properties.items() if item.get("class") == "secret"}
     for path, key, value in secret_values:
-        if _is_base_or_test(path, allowed_sources) and _MARKER.search(value):
+        marked = _MARKER.search(value)
+        if _is_base_or_test(path, allowed_sources) and marked:
             failures.append(("MARKER_POLICY_VIOLATION", "Base or test configuration contains an environment marker."))
-        if ("secret" in key.lower() or "password" in key.lower() or "token" in key.lower()) and value and not _MARKER.search(value) and looks_secret(value):
-            failures.append(("PLAINTEXT_SECRET", "Configuration contains a plaintext secret-shaped value."))
+        # Test files hold fixtures, so a secret-class key may carry a plain value there, never a secret-shaped one.
+        plain_secret_key = key in secret_keys and not path.startswith("src/test/")
+        if value and not marked and (looks_secret(value) or plain_secret_key):
+            failures.append(("PLAINTEXT_SECRET", "Configuration contains a plaintext secret value."))
     return _unique(failures)
 
 
@@ -76,6 +80,8 @@ def _configuration_values(project_dir: str) -> tuple[set[str], dict[str, tuple[s
                     if not match:
                         continue
                     key, value = match.groups()
+                    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                        value = value[1:-1]
                     defined.add(key)
                     marker = _MARKER.fullmatch(value)
                     if marker:

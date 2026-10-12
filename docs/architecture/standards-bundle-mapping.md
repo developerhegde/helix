@@ -28,24 +28,24 @@ This document turns every rule of the standards document into one entry, as `cli
 
 | Status | Rules |
 | --- | --- |
-| Built | 3 |
-| Partly built | 8 |
-| Designed | 15 |
+| Built | 5 |
+| Partly built | 7 |
+| Designed | 14 |
 | To design | 45 |
 | Reviewer | 16 |
 | Outside Helix | 6 |
 | Deviation | 1 |
 | **Total** | **94** |
 
-Of the 94 rules (87 Blocking, 7 Advisory), 71 are for Helix to check automatically, 16 stay with a reviewer, 6 belong to the client's pipeline or platform, and 1 is an accepted deviation in B2. Only 11 of the 71 are fully or partly built today.
+Of the 94 rules (87 Blocking, 7 Advisory), 71 are for Helix to check automatically, 16 stay with a reviewer, 6 belong to the client's pipeline or platform, and 1 is an accepted deviation in B2. Only 12 of the 71 are fully or partly built today.
 
 ## Naming
 
 | ID | Rule | S | Form | Checked by | Status |
 | --- | --- | --- | --- | --- | --- |
-| STD-NAM-01 | Repository and `artifactId` are `<domain>-<layer>-v<major>`; layer is `exp`, `prc` or `sys` | B | Setting: profile `naming` block, parts `name`, `layer`, `version` | Helix | Partly built: B1-015 checks the grammar; the project-name check (NAM-002) is designed |
+| STD-NAM-01 | Repository and `artifactId` are `<domain>-<layer>-v<major>`; layer is `exp`, `prc` or `sys` | B | Setting: profile `naming` block, parts `name`, `layer`, `version` | Helix | Built: B1-015 checks the grammar and NAM-002 the project's names |
 | STD-NAM-02 | Exchange specification asset is `<domain>-<layer>-api`, title spells the layer | B | Template | Helix | To design |
-| STD-NAM-03 | Runtime application is `<artifactId>-<env>` | B | Setting: deployed parts end in `environment` | Helix | Designed (NAM-003) |
+| STD-NAM-03 | Runtime application is `<artifactId>-<env>` | B | Setting: deployed parts end in `environment` | Helix | Built (NAM-003) |
 | STD-NAM-04 | API base path is `/api/v<major>/<resource>` | B | Validation | Helix | To design |
 | STD-NAM-05 | Mule files are `global.xml`, `<name>-api.xml`, `<resource>-impl.xml`, `error-handler.xml` | B | Setting and Template | Helix | To design (D3: Helix follows the standard) |
 | STD-NAM-06 | APIkit flows keep their generated names | B | Validation: one flow per contract operation, name unchanged | Helix | Designed |
