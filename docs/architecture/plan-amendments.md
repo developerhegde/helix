@@ -79,6 +79,7 @@ File names without a path are in `docs/architecture/`. "LLD nn" is `docs/lld/nn-
 | §6, "`docs/DATA-FLOW.md`'s *nothing leaves the machine* becomes …" | The data posture is stated as a reversal of Meridian's | The posture stands as Helix's own: client data leaves the machine by design, under the client's rules | LLD 10 |
 | §7 item 1, "different routes and grammars … names each parse under their own grammar" | The two fixture clients differ by Meridian grammar | They differ by the `naming` block of their own fixture profiles | `b2-naming-and-environment-contract.md` (Acceptance criteria 1) |
 | §7 item 7, "The human trial Meridian has carried since Phase 2 has its twin here" | The trial is framed as Meridian's twin | The trial stands as Helix's own done item | — |
+| §1 and §3.2, CI on demand because minutes are billed | This repository's tests run only on demand and on the release-gate branch, never on pull requests or Windows | They also run on pull requests while the repository is public, on Linux and Windows, because public repositories are not billed for standard runners; a private repository returns to on-demand runs. Maven for generated applications is unchanged: never on push, never on Windows (owner decision, 2026-10-13) | LLD 01 §3.10 |
 
 ## Amendments to the HLD (`ai-builder-hld.md`)
 

@@ -81,16 +81,22 @@ def _sources():
 
 
 class CiPolicyGuard(unittest.TestCase):
-    """LLD 01 §3.10: CI runs on demand and on the release-gate branch, on one Linux runner, and nowhere else."""
+    """LLD 01 §3.10: CI runs on demand, on the release-gate branch, and on pull requests only while the
+    repository is public; Windows runs on pull requests only."""
 
     def test_ci_triggers_and_runner(self):
         root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         with open(os.path.join(root, ".github", "workflows", "ci.yml"), encoding="utf-8") as handle:
             workflow = yaml.safe_load(handle)
         triggers = workflow.get("on", workflow.get(True))  # YAML reads a bare `on` as true
-        self.assertEqual(set(triggers), {"workflow_dispatch", "push"})
+        self.assertEqual(set(triggers), {"workflow_dispatch", "push", "pull_request"})
         self.assertEqual(triggers["push"], {"branches": ["test"]})
-        self.assertEqual({job["runs-on"] for job in workflow["jobs"].values()}, {"ubuntu-24.04"})
+        jobs = workflow["jobs"].values()
+        self.assertEqual({job["runs-on"] for job in jobs}, {"ubuntu-24.04", "windows-latest"})
+        for job in jobs:  # a pull-request run is always conditional on the repository being public
+            self.assertIn("!github.event.repository.private", job["if"])
+            if job["runs-on"] != "ubuntu-24.04":
+                self.assertIn("github.event_name == 'pull_request'", job["if"])
 
 
 if __name__ == "__main__":
