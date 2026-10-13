@@ -83,13 +83,65 @@ testing:
   munit_version: 3.7.4
   require_concrete_assertions: true
   forbid_processor_under_test_mocks: true
-  minimum_application_coverage: 80
+  minimum_application_coverage: 75
 review:
   required_artifacts: [contract, hld, lld, test_evidence]
   checklist: []
 ```
 
+Two values are the client's to own. `project.golden_parent` names the client's own parent POM, which the client publishes and maintains; Helix pins its coordinates and never writes it. `testing.minimum_application_coverage` defaults to 75, the value in `docs/mulesoft-development-standards.md`, and a client may raise it.
+
 The schema remains deliberately narrow in its first iteration. Unknown prose must not be treated as executable policy.
+
+## Additions accepted on 2026-10-12
+
+`standards-bundle-mapping.md` classifies all 94 rules of `docs/mulesoft-development-standards.md`. To carry them, the bundle needs the fields below. They are additive, so the format stays `client_standards_bundle.v1`. The loader does not read them yet.
+
+```yaml
+project:
+  mule_files: {global: global.xml, error_handler: error-handler.xml, router: "{name}-api.xml", implementation: "{resource}-impl.xml"}
+  child_pom: {forbid_versions: true, forbid_profiles: true, forbid_final_name: true, forbid_version_ranges: true}
+api:
+  contract_source: repository            # or exchange_dependency (mapping decision D2)
+  base_path: /api/v{major}
+patterns:                                # anchored regular expressions, checked by the validator
+  implementation_flow: "[a-z]+(-[a-z0-9]+)+-flow"
+  sub_flow: "[a-z]+(-[a-z0-9]+)+-subflow"
+  connector_config: "[a-z0-9]+(-[a-z0-9]+)+-config"
+  property_key: "[a-z][a-z0-9]*(\\.[a-z][a-z0-9-]*)+"
+  flow_variable: "[a-z][A-Za-z0-9]*"
+  error_type: "APP:[A-Z][A-Z0-9_]*"
+  object_store: "[a-z0-9]+(-[a-z0-9]+)*-os"
+connectors:
+  allowed: [http, db, salesforce, sftp, file, anypoint-mq, jms, vm, objectstore, email, wsc, validation, secure-properties]
+configuration:
+  layout: deployment_properties          # or environment_files (mapping decision D1)
+  same_keys_every_environment: true
+error_handling:
+  handler_file: error-handler.xml
+  mappings:
+    - {types: ["APIKIT:BAD_REQUEST", "APP:VALIDATION"], status: 400, code: VALIDATION_FAILED}
+    - {types: ["APIKIT:NOT_FOUND", "APP:*_NOT_FOUND"], status: 404, code: NOT_FOUND}
+    - {types: [ANY], status: 500, code: INTERNAL_ERROR}       # the full table has eleven rows
+testing:
+  minimum_application_coverage: 75
+  minimum_resource_coverage: 50
+  minimum_flow_coverage: 50
+review:
+  branch_pattern: "feature/{ticket_key}-{slug}"
+  commit_pattern: "{ticket_key}: {summary}"
+  approvals: 1
+  hotfix_approvals: 2
+rules:                                   # the registry: one entry per approved rule
+  - {id: STD-POM-01, strength: blocking, form: validation, checked_by: helix, check: POM_PARENT_MISMATCH}
+  - {id: STD-LOG-03, strength: blocking, form: checklist, checked_by: reviewer}
+```
+
+`configuration.layout` here records what the standard requires. The layout Helix acts on is the profile's `naming.configuration.layout`, because it is bound by the naming-contract digest; the doctor refuses a profile where the two differ (B1-019).
+
+The bundle also lists the other client-supplied files under `standards/` by path and digest (`files[]`: the deny-list, the skills text, the decision table), so the profile directory holds nothing Helix reads that is not either `helix.yaml` or named by the bundle (profile schema reconciliation, decision 11; checked by B1-016). Each entry is `{path, purpose, sha256}`, with `path` relative to the bundle and `purpose` one of `denylist`, `skills`, `decision_table`.
+
+A rule with `checked_by: reviewer` appears in the pull request as a checklist line; Helix never marks it passed. A rule with `checked_by: helix` names the validator code that fails when it is broken, so a rule without a built check is visible as such.
 
 ## Converting prose into usable standards
 

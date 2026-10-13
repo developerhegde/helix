@@ -1,8 +1,10 @@
 # 00 — Conventions and shared contracts
 
+> Standalone revision, 2026-10-12: the shared names, storage paths, schemas and credential model describe standalone Helix, and Meridian appears only as an optional future adapter.
+
 Every other file in `lld/` uses the names, enums, schemas and credential model defined here. If a section file needs a new shared identifier, it is added here first.
 
-Sources: [`ai-builder-plan.md`](../../ai-builder-plan.md) and [`ai-builder-hld.md`](../../ai-builder-hld.md) at this repository's root, plus the standalone architecture decisions in `docs/architecture/`. The standalone decisions govern B1–B5 where they differ from the historic plan or HLD. Meridian is not an input to core behavior; any future integration is optional and must be isolated behind a version-pinned adapter contract.
+Sources: [`ai-builder-plan.md`](../../ai-builder-plan.md) and [`ai-builder-hld.md`](../../ai-builder-hld.md) at this repository's root, plus the standalone architecture decisions in `docs/architecture/`. The standalone decisions govern B1–B5 where they differ from the historic plan or HLD; `docs/architecture/plan-amendments.md` lists each difference. Meridian is not an input to core behavior; any future integration is optional and must be isolated behind a version-pinned adapter contract.
 
 ## 1. Status tags
 
@@ -86,7 +88,7 @@ Every phase is a CLI; the GitHub Action, the Temporal activity and a terminal ru
 
 | Command | Runs in | Purpose | Owning file |
 | --- | --- | --- | --- |
-| `helix profile validate` | anywhere | Schema and completeness check of a profile | 02 |
+| `helix profile validate` | — | Withdrawn: the offline `helix doctor` is this check (profile schema reconciliation, decision 12) | 02 |
 | `helix doctor` | control plane | All onboarding checks, numbered | 02 |
 | `helix discover` | control plane | Exchange and connector discovery through explicit client adapters | 05 |
 | `helix intake-prepare` | control plane | Classifies the wake and writes intake's inputs from the receiver's snapshot; no Jira call | 05 |
@@ -105,7 +107,7 @@ Every phase is a CLI; the GitHub Action, the Temporal activity and a terminal ru
 | `helix maven-proxy serve` | control plane | Maven repository proxy | 03 |
 | `helix worker --class {control,agent}` | worker | Temporal worker for a task-queue class | 08 |
 | `helix orchestration {step,cutover,cancel}` | control plane | One control step as a fresh subprocess; cutover of in-flight driver tickets; cancel of waiting runs under the kill switch | 08 |
-| `helix audit verify --run RUN_ID` | anywhere | Wraps `meridian runs --verify` | 09 |
+| `helix audit verify --run RUN_ID` | anywhere | Verifies the run's Helix-owned audit chain in process (`helix.audit.chain`) | 09 |
 | `helix meter report` | anywhere | Spend and measurement per run, phase, client | 09 |
 | `helix meter measure` | control plane | Measurement for one run, or the window sweep: accepted, change requests, hand rewrites, minutes | 09 |
 | `helix deploy …` | reserved | Reserved for B6: every sub-command exits 2 in B1–B5 | 11 |
@@ -143,7 +145,7 @@ The workflow does not branch on exit codes; each phase CLI also writes a `PhaseO
 | `phase` | `discover`, `intake`, `design`, `build`, `test`, `pr`; `deploy` reserved for B6 | `[LLD]` |
 | `gate` | `gate1_requirement`, `gate2_design`, `gate3_merge`, `gate4_deploy` (B6) | `[PLAN]` names, `[LLD]` keys |
 | Logical ticket state | `new`, `needs_info`, `requirement_review`, `design_review`, `building`, `in_review`, `done`, `cancelled`, optional `draft`; `keys_filled`, `deploy_review`, `deployed` reserved for B6 (file 11) | `needs_info`, `requirement_review`, `design_review`, `draft`: `[PLAN]`; others `[LLD]` |
-| Branch | `helix/{ticket_key}` in the generated-app repository | `[LLD]` |
+| Branch | The standards bundle's `review.branch_pattern`, for example `feature/{ticket_key}-{slug}`, in the generated-app repository. Any file that still shows the earlier fixed name is to be revised to this row. How `{slug}` is derived from the ticket is to design (STD-NAM-18) | Standards mapping decision D4 |
 | Fact status | `known`, `assumed`, `missing`, `changed` | `[PLAN]` |
 | Fact id | `source`, `target`, `trigger`, `volume`, `sla`, `error_handling`, `security`, `mapping`, `environments` (extensible per profile) | `[PLAN]` |
 
@@ -155,6 +157,7 @@ The profile maps each logical ticket state, except those reserved for B6, to the
 | --- | --- | --- |
 | Client profile | `$HELIX_PROFILES_ROOT/{client_id}/` holding `helix.yaml` and versioned `standards/` bundle material; gitignored | Standalone architecture decision |
 | Run artefacts | `$HELIX_STATE_ROOT/{client_id}/runs/{ticket_key}/`: briefs, approved bundles, results, tool logs, reports and validation evidence; durable | `[LLD]` |
+| Audit chain | `$HELIX_STATE_ROOT/{client_id}/audit/`: append-only, hash-chained JSONL segments written by `helix.audit.chain` and checked by `helix audit verify`; durable (file 09) | Standalone architecture decision |
 | Helix store | PostgreSQL database `helix`; every table carries `client_id` with row-level security per client | `[LLD]` |
 | Activity workdir | `/work/{phase_attempt_id}/`: ephemeral, destroyed after the activity | `[HLD-P#13]` |
 | Attempt spool | `$HELIX_SPOOL_ROOT/{client_id}/{attempt_id}/` with `in/` and `out/`, `attempt_id` being the `phase_attempt_id` or `verify_attempt_id`: plain files moved between the run directory and the agent host; an export separate from `$HELIX_STATE_ROOT`, which the agent host never mounts; ephemeral per attempt (file 08) | `[LLD]` |
@@ -189,7 +192,7 @@ All JSON documents carry `"schema": "<name>"` and are validated on read and writ
 | `egress_policy.v1` | 03 | Egress allowlist per container and per service; file 10 states the hosts each class may reach |
 | `agent_submission.v1`, `agent_definition.v1`, `transcript.v1`, `tool_log.v1`, `env_snapshot.v1` | 04 | The agent's submitted result; the agent definition; session transcript, tool log and environment captured at agent start |
 | `ticket_text.v1`, `intake_context.v1`, `ledger_snapshot.v1`, `rejection_context.v1`; table `intake_round` | 05 | Intake inputs and the ledger handed to design; a gate-2 rejection's reason; one row per intake comment |
-| `design_resolutions.v1`, `estate_names.v1`, `standards_trace.v1` | 06 | Row choices from a gate-2 rejection; estate names for the collision check; each client standard traced to the rule, row or paragraph that applies it |
+| `design_resolutions.v1`, `estate_names.v1`, `standards_trace.v1` | 06 | Row choices from a gate-2 rejection; estate names for the collision check, filled only by an optional estate provider and recorded as `not_checked` when none is configured; each client standard traced to the rule, row or paragraph that applies it |
 | `ticket_signal.v1`, `ticket_workflow_input.v1`, `ticket_workflow_state.v1`; tables `ticket_run`, `external_write`, `agent_job` | 08 | The one signal contract, filled by file 03; workflow input and state; run projection, external-write records, agent-job queue |
 | `price_table.v1`, `audit_segment_header.v1`; tables `audit_segment`, `audit_event_key`, `meter_balance` | 09 | Model prices; first record of each audit segment; segments, event keys, cap balances |
 | `injection_case.v1` | 10 | One case of the injection corpus |

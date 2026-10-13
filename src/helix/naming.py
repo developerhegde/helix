@@ -7,7 +7,7 @@ import json
 import re
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Optional, Sequence
 
 
 class NamingInvalid(ValueError):
@@ -19,6 +19,14 @@ _FIXED_PARTS = ("prefix", "scope", "region", "layer")
 _ENV_KEY = re.compile(r"^[A-Z][A-Z0-9_]{1,31}$")
 _ENV_SUFFIX = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
 _RELATIVE_PATH = re.compile(r"^[A-Za-z0-9._/-]+$")
+LAYOUT_ENVIRONMENT_FILES = "environment_files"      # one file per environment inside the application
+LAYOUT_DEPLOYMENT_PROPERTIES = "deployment_properties"  # one base and one secure file; the pipeline supplies the rest
+_LAYOUT_FIELDS = {
+    LAYOUT_ENVIRONMENT_FILES: ("directory", "base_file", "environment_file", "secure_environment_file",
+                               "test_directory", "test_file", "secure_test_file"),
+    LAYOUT_DEPLOYMENT_PROPERTIES: ("directory", "base_file", "secure_file",
+                                   "test_directory", "test_file", "secure_test_file"),
+}
 _FORBIDDEN_PATH = (".github/", ".gitlab-ci", ".mvn/", "mvnw", "src/main/resources/api/", "docs/")
 
 
@@ -33,10 +41,11 @@ class Environment:
 @dataclass(frozen=True)
 class ConfigurationPaths:
     base: str
-    environment: str
-    secure_environment: str
+    environment: Optional[str]         # None in the deployment-properties layout
+    secure_environment: Optional[str]  # None in the deployment-properties layout
     test: str
     secure_test: str
+    secure: Optional[str] = None       # the single secure file of the deployment-properties layout
 
 
 @dataclass(frozen=True)
@@ -51,6 +60,10 @@ class NamingContract:
     configuration: Mapping[str, str]
     digest: str
 
+    @property
+    def layout(self) -> str:
+        return self.configuration.get("layout", LAYOUT_ENVIRONMENT_FILES)
+
     def allowed_environment_keys(self) -> tuple[str, ...]:
         return tuple(environment.key for environment in self.environments if not environment.production)
 
@@ -62,14 +75,19 @@ class NamingContract:
 
     def render_deployed(self, parts: Mapping[str, str], environment_key: str) -> str:
         values = dict(parts)
-        values["environment"] = self._environment(environment_key).suffix
+        environment = self._environment(environment_key)
+        if "environment" in self.deployed_parts:
+            values["environment"] = environment.suffix
         return self._render(self.deployed_parts, values)
 
     def parse_repository(self, value: str) -> Mapping[str, str]:
         return self._parse(self.repository_parts, value)
 
-    def parse_deployed(self, value: str) -> tuple[Mapping[str, str], str]:
+    def parse_deployed(self, value: str) -> tuple[Mapping[str, str], Optional[str]]:
+        """The name's parts and its environment key; the key is None when the deployed form has no environment part."""
         values = dict(self._parse(self.deployed_parts, value))
+        if "environment" not in self.deployed_parts:
+            return MappingProxyType(values), None
         suffix = values.pop("environment", None)
         matches = [environment.key for environment in self.environments if environment.suffix == suffix]
         if len(matches) != 1:
@@ -80,6 +98,13 @@ class NamingContract:
         environment = self._environment(environment_key)
         directory = self.configuration["directory"]
         test_directory = self.configuration["test_directory"]
+        if self.layout == LAYOUT_DEPLOYMENT_PROPERTIES:
+            return ConfigurationPaths(
+                base=_join(directory, self.configuration["base_file"]), environment=None, secure_environment=None,
+                test=_join(test_directory, self.configuration["test_file"]),
+                secure_test=_join(test_directory, self.configuration["secure_test_file"]),
+                secure=_join(directory, self.configuration["secure_file"]),
+            )
         return ConfigurationPaths(
             base=_join(directory, self.configuration["base_file"]),
             environment=_join(directory, self.configuration["environment_file"].format(environment=environment.suffix)),
@@ -105,6 +130,10 @@ class NamingContract:
             ],
             "configuration": dict(self.configuration),
         }
+
+    def to_staged(self) -> dict[str, Any]:
+        """The immutable per-attempt input: the canonical contract and its digest."""
+        return {**self.as_dict(), "digest": self.digest}
 
     def _environment(self, key: str) -> Environment:
         for environment in self.environments:
@@ -194,6 +223,31 @@ def compile_contract(value: Any) -> NamingContract:
                           version_pattern, environments, MappingProxyType(configuration), digest)
 
 
+def load_contract(staged: Any) -> NamingContract:
+    """Rebuild a contract from its staged form and prove the digest it carries."""
+    if not isinstance(staged, dict) or staged.get("schema") != "naming_contract.v1":
+        raise NamingInvalid("staged naming contract schema is invalid")
+    application = staged.get("application")
+    if not isinstance(application, dict):
+        raise NamingInvalid("staged naming contract is incomplete")
+    contract = compile_contract({
+        "schema_version": 1,
+        "application": {
+            "separator": application.get("separator"),
+            "repository": {"parts": application.get("repository_parts")},
+            "deployed": {"parts": application.get("deployed_parts")},
+            "allowed": application.get("allowed"),
+            "name_pattern": application.get("name_pattern"),
+            "version_pattern": application.get("version_pattern"),
+        },
+        "environments": staged.get("environments"),
+        "configuration": staged.get("configuration"),
+    })
+    if staged.get("digest") != contract.digest:
+        raise NamingInvalid("staged naming contract digest does not match its content")
+    return contract
+
+
 def _mapping(value: Mapping[str, Any], key: str) -> Mapping[str, Any]:
     item = value.get(key)
     if not isinstance(item, dict):
@@ -250,28 +304,40 @@ def _environments(value: Any) -> tuple[Environment, ...]:
 def _configuration(value: Any) -> dict[str, str]:
     if not isinstance(value, dict):
         raise NamingInvalid("configuration must be a mapping")
-    names = ("directory", "base_file", "environment_file", "secure_environment_file", "test_directory", "test_file", "secure_test_file")
-    if set(value) != set(names) or not all(isinstance(value[name], str) and value[name] for name in names):
-        raise NamingInvalid("configuration fields are incomplete")
+    layout = value.get("layout", LAYOUT_ENVIRONMENT_FILES)
+    if not isinstance(layout, str) or layout not in _LAYOUT_FIELDS:
+        raise NamingInvalid("configuration.layout is unknown")
+    names = _LAYOUT_FIELDS[layout]
+    if set(value) - {"layout"} != set(names) or not all(isinstance(value[name], str) and value[name] for name in names):
+        raise NamingInvalid("configuration fields do not match the layout")
     directory, test_directory = value["directory"], value["test_directory"]
-    if not directory.startswith("src/main/resources/") or not test_directory.startswith("src/test/resources/"):
+    if not _within(directory, "src/main/resources") or not _within(test_directory, "src/test/resources"):
         raise NamingInvalid("configuration directories are outside resource roots")
-    for name, path in value.items():
+    for name in names:
+        path = value[name]
         path_for_validation = path.replace("{environment}", "environment")
         if (not _RELATIVE_PATH.fullmatch(path_for_validation) or path.startswith("/")
                 or ".." in path.split("/") or "${" in path):
             raise NamingInvalid(f"configuration.{name} is not a safe relative path")
-    for name in ("environment_file", "secure_environment_file"):
+    templated = ("environment_file", "secure_environment_file") if layout == LAYOUT_ENVIRONMENT_FILES else ()
+    for name in templated:
         if value[name].count("{environment}") != 1:
             raise NamingInvalid(f"configuration.{name} must contain one environment placeholder")
-    for name in ("base_file", "test_file", "secure_test_file"):
-        if "{environment}" in value[name]:
+    for name in names:
+        if name not in templated and "{environment}" in value[name]:
             raise NamingInvalid(f"configuration.{name} must not contain an environment placeholder")
-    rendered = (_join(directory, value["environment_file"].format(environment="env")),
-                _join(directory, value["secure_environment_file"].format(environment="env")))
+    pair = templated or ("base_file", "secure_file")
+    rendered = tuple(_join(directory, value[name].replace("{environment}", "env")) for name in pair)
     if rendered[0] == rendered[1] or any(path.startswith(prefix) for path in rendered for prefix in _FORBIDDEN_PATH):
         raise NamingInvalid("configuration paths conflict with protected paths")
-    return {name: value[name].replace("\\", "/") for name in names}
+    result = {name: value[name].replace("\\", "/") for name in names}
+    if layout != LAYOUT_ENVIRONMENT_FILES:  # the default stays implicit, so earlier contracts keep their digest
+        result["layout"] = layout
+    return result
+
+
+def _within(directory: str, root: str) -> bool:
+    return directory == root or directory.startswith(root + "/")
 
 
 def _join(directory: str, filename: str) -> str:

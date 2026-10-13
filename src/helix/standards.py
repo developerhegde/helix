@@ -50,6 +50,7 @@ def load(profile_dir: str, client_id: str, reference: Any) -> StandardsBundle:
     except (UnicodeDecodeError, yaml.YAMLError) as exc:
         raise StandardsInvalid("standards bundle is not UTF-8 YAML") from exc
     _validate_bundle(value, client_id, version)
+    _validate_files(os.path.dirname(bundle_path), value.get("files"))
     return StandardsBundle(client_id, version, digest, MappingProxyType(value))
 
 
@@ -67,6 +68,31 @@ def _validate_bundle(value: Any, client_id: str, version: str) -> None:
     logging = value.get("logging")
     if not isinstance(logging, dict) or logging.get("style") != "json_logger_module":
         raise StandardsInvalid("standards bundle logging policy is unsupported")
+
+
+_FILE_PURPOSES = ("denylist", "skills", "decision_table")
+
+
+def _validate_files(bundle_dir: str, files: Any) -> None:
+    """The client's other files, named by the bundle so each is bound by a digest. Paths are relative to the bundle."""
+    if files is None:
+        return
+    if not isinstance(files, list):
+        raise StandardsInvalid("standards bundle files must be a list")
+    seen = set()
+    for item in files:
+        path = item.get("path") if isinstance(item, dict) else None
+        if (not isinstance(path, str) or not _safe_relative(path) or path in seen
+                or item.get("purpose") not in _FILE_PURPOSES):
+            raise StandardsInvalid("standards bundle file entry is invalid")
+        seen.add(path)
+        try:
+            with open(_join(bundle_dir, path), "rb") as handle:
+                digest = hashlib.sha256(handle.read()).hexdigest()
+        except OSError as exc:
+            raise StandardsInvalid("standards bundle file cannot be read") from exc
+        if digest != item.get("sha256"):
+            raise StandardsInvalid("standards bundle file digest does not match")
 
 
 def _safe_relative(path: str) -> bool:

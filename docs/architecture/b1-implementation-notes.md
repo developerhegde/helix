@@ -17,7 +17,9 @@ Implements [`b1-client-profile-and-doctor.md`](b1-client-profile-and-doctor.md).
 | Path | Responsibility |
 | --- | --- |
 | `src/helix/product_identity.py` | Product identity manifest; profile file name and environment variable derive from it |
-| `src/helix/profile/doctor.py` | Rules B1-001 to B1-014, `Finding`, `Report`, exit code |
+| `src/helix/profile/doctor.py` | Rules B1-001 to B1-020, `Finding`, `Report`, exit code |
+| `src/helix/naming.py` | `naming_contract.v1` compiler, renderer and parser (B1-015) |
+| `src/helix/standards.py` | `client_standards_bundle.v1` loader and digest check (B1-016) |
 | `src/helix/profile/loader.py` | `load_profile()`: refuses a profile with any error before a phase starts |
 | `src/helix/profile/policy.py` | The local, versioned policy table |
 | `src/helix/profile/secrets.py` | Secret tripwire: key name and value shape, paths only |
@@ -26,7 +28,7 @@ Implements [`b1-client-profile-and-doctor.md`](b1-client-profile-and-doctor.md).
 
 ## Decisions and resolved ambiguities
 
-0. **Helix is standalone with a future Meridian integration seam** (owner decision, 2026-10-09). B1 imports, reads, and validates nothing of Meridian's. The profile is `helix.yaml` only, B1-015 is withdrawn, and a guard test refuses any `meridian` reference in `src/` or `pyproject.toml`. A later integration must be introduced through an explicit adapter contract and profile capability, with version-pinned dependency and contract tests; it must not be added as an implicit runtime dependency.
+0. **Helix is standalone with a future Meridian integration seam** (owner decision, 2026-10-09). B1 imports, reads, and validates nothing of Meridian's. The profile is `helix.yaml` plus the standards bundle it references. The Meridian file check that first held the id B1-015 was withdrawn before release (B1-015 is now the naming rule), and a guard test refuses any `meridian` reference in `src/` or `pyproject.toml`. A later integration must be introduced through an explicit adapter contract and profile capability, with version-pinned dependency and contract tests; it must not be added as an implicit runtime dependency.
 1. **Exit codes with warnings.** The contract's exit table lists "warnings only without `--strict`" under exit 1, but exit 0 and the `--strict` description say warnings fail only under `--strict`. Implemented: errors → 1; warnings only → 0, or 1 with `--strict`.
 2. **Profile path.** `--profile` wins; `HELIX_CLIENT_PROFILE` is the only fallback. Both must be absolute. Nothing else is searched.
 3. **Status values.** `healthy`, `warning`, `error`. JSON adds `deferred_checks` (additive), so automation can see that connected-system checks were not simulated.
@@ -34,7 +36,7 @@ Implements [`b1-client-profile-and-doctor.md`](b1-client-profile-and-doctor.md).
 5. **Allowed hosts (B1-006).** "Approved by the client's policy" is read as: every listed host must be in the policy table's hosts for the configured provider, with `{region}` filled from the model route. Entries may be a bare host or `https://host`; other schemes, ports and paths are refused.
 6. **Production-like names (B1-011).** Case-insensitive match of the whole name or any alphanumeric token (`acme-PRD` is refused; `acme-product` is not) against `prod`, `production` and the table's aliases (`prd`, `live`).
 7. **Findings never carry profile values.** Messages are fixed text; only the field path varies. YAML parser messages are dropped because they quote content. An internal error prints only the exception type.
-8. **`client_id`** uses the contract's pattern. It is not compared with the directory name (LLD 00 §6 asks for that; the B1 contract does not).
+8. **`client_id`** uses the contract's pattern and must equal the profile directory's name (B1-017, added by the profile schema reconciliation).
 9. **References.** `jira.webhook_secret_ref` and `anypoint.connected_app_ref` must be `vault://` references; a secret-named field holding anything other than a reference is a B1-014 finding.
 
 ## Deviations
@@ -44,6 +46,13 @@ Implements [`b1-client-profile-and-doctor.md`](b1-client-profile-and-doctor.md).
 | Packaging | No `uv.lock`; only PyYAML is declared | B1 needs nothing else; `uv` is not installed on the dev machines | When B2 adds its dependencies |
 | LLD | `docs/lld/` still describes Meridian integration (`meridian_bridge`, pinned wheel, Meridian CLIs and audit chain) | The standalone decision came after the LLD | LLD revision, before B2 design work |
 | Test runtime | The suite ran on Python 3.14.8 on macOS only, in the project's `.venv` | The Windows dev machine has not run it yet | First run on Windows or in CI |
+
+## Open design questions
+
+0. Thirteen differences between the B1 contract and LLD 02 were decided on 2026-10-12 in `profile-schema-reconciliation.md`; its *To build* list is the open work. Question 1 below is its decision 8.
+1. `helix.yaml` now lists environments twice: `anypoint.environments` (checked by B1-011) and `naming.environments` (checked by B1-015). Their relation is undefined; one should derive from the other.
+2. Whether a warnings-only result should exit 0 without `--strict` still needs the owner's confirmation (decision 1).
+3. The policy table has no named owner or release process.
 
 ## Policy table
 

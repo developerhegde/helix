@@ -70,29 +70,38 @@ It does not receive Meridian files, platform credentials, Anypoint inventory, st
 ```yaml
 schema: validation_policy.v1
 version: 1
+standards_bundle_digest: <SHA-256 of the staged client standards bundle>
 maven:
-  golden_parent: {group_id: example, artifact_id: helix-parent, version: 1.0.0}
-  allowed_plugins: []
-  allowed_dependency_sources: [design_bundle, golden_parent]
-  mule_runtime: 4.9.x
+  golden_parent: {groupId: example, artifactId: acme-mule-parent, version: 1.0.0}
+  allowed_plugins: [org.mule.tools.maven:mule-maven-plugin]
+  mule_runtime: 4.9.1
   munit_version: 3.7.4
 project:
+  forbidden_paths: [.github/**, .gitlab-ci*, Jenkinsfile, .mvn/**, mvnw*]
+  forbid_java_interop: true
+configuration:
   allowed_property_sources:
     - src/main/resources/config/config.yaml
-  forbidden_paths:
-    - .github/**
-    - .gitlab-ci*
-    - Jenkinsfile
-    - .mvn/**
-    - mvnw*
-  forbid_java_interop: true
-properties:
   environment_selector: env
   secure_property_key: secure.key
-  marker_prefixes: [MERIDIAN_SET_, MERIDIAN_ENCRYPT_]
+  marker_prefix: HELIX
+testing:
+  minimum_application_coverage: 75
 ```
 
-The marker syntax remains compatible with generated Mule artefacts during transition, but Helix owns validation semantics. A later product decision may rename those markers without changing validator architecture.
+| Section | Meaning |
+| --- | --- |
+| `standards_bundle_digest` | Binds the policy to one approved standards bundle; a design bundle carrying another digest fails with `STANDARDS_BUNDLE_MISMATCH`. |
+| `maven` | The client's parent POM, by exact coordinates, plus the plugins and runtime a generated POM may declare. The parent POM is owned and published by the client; Helix pins it and never writes it. |
+| `project` | Paths a generated tree may not contain, and whether Java interop is refused. |
+| `configuration` | The base property source, the deployment-supplied selector and secure-key names, and the mark prefix. |
+| `testing` | The minimum application coverage. The default is 75, the value in `docs/mulesoft-development-standards.md`; a client may raise it in its standards bundle. |
+
+The control plane compiles the policy from the approved standards bundle (`project`, `testing`) and the profile's naming block (`configuration`), so the three cannot disagree. Nothing in it comes from a ticket or a model.
+
+**Marks.** A value owed after merge is written as `${HELIX_SET_<ENV>}`, and an owed secret as `${HELIX_ENCRYPT_<ENV>}`, where `<ENV>` is the naming contract's environment key. The prefix is policy data, so a product rename or a client convention changes one field and no validator code.
+
+`marker_prefix` and `environment_selector` are enforced when the naming contract is staged. Not yet enforced: `munit_version` and `secure_property_key`.
 
 ## Reference and property rules
 
@@ -178,3 +187,5 @@ Before B2 implementation, revise LLD files 01, 02, 04, 06, 07, 08, 09, 10, and 1
 - A future optional Meridian adapter, which must not be required by B1 or B2.
 
 The immediate implementation focus is `07-b2-build-test-pr.md`: replace `meridian report`, `prepare`, naming, and reference-scan requirements with this Helix-owned validation subsystem. Do not implement the Meridian adapter during B2.
+
+`07-b2-build-test-pr.md` was revised to this design on 2026-10-12, and `b2-design-bundle-contract.md` fixes the design-bundle fields B2 reads. The other files are still to be revised.

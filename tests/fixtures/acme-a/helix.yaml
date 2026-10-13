@@ -20,7 +20,7 @@ data_handling:
 jira:
   cloud_id: acme-cloud-id
   project_key: ACME
-  webhook_secret_ref: vault://acme-a/jira-webhook
+  webhook_secret_ref: vault://acme-a/profile/jira-webhook
   bot_account_id: acme-jira-bot
   statuses:
     needs_info: Needs info
@@ -39,7 +39,7 @@ vault:
   scope: acme-a/profile
 anypoint:
   business_group_id: acme-nonprod
-  connected_app_ref: vault://acme-a/anypoint-connected-app
+  connected_app_ref: vault://acme-a/profile/anypoint-connected-app
   secret_expiry: 2030-01-01T00:00:00Z
   environments:
     - acme-sandbox
@@ -68,14 +68,17 @@ naming:
       suffix: dev
       order: 10
       production: false
+      platform_name: acme-sandbox
     - key: SIT
       suffix: sit
       order: 20
       production: false
+      platform_name: acme-test
     - key: PROD
       suffix: prod
       order: 90
       production: true
+      platform_name: acme-production
   configuration:
     directory: src/main/resources/config
     base_file: config.yaml

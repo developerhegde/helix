@@ -1,4 +1,5 @@
 # Helix — High-Level Design
+> Amended by the standalone decisions of 2026-10-09 and 2026-10-12: see docs/architecture/plan-amendments.md. Where this document and the amendments differ, the amendments govern.
 
 Oct 8, 2026 · Vikas Hegde · Exported from the [live doc](https://claude.ai/code/artifact/079f03ac-c7a6-4776-989d-83eb47cf297b); edit there and re-export.
 
