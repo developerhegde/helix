@@ -17,7 +17,7 @@ Implements [`b1-client-profile-and-doctor.md`](b1-client-profile-and-doctor.md).
 | Path | Responsibility |
 | --- | --- |
 | `src/helix/product_identity.py` | Product identity manifest; profile file name and environment variable derive from it |
-| `src/helix/profile/doctor.py` | Rules B1-001 to B1-018, `Finding`, `Report`, exit code |
+| `src/helix/profile/doctor.py` | Rules B1-001 to B1-020, `Finding`, `Report`, exit code |
 | `src/helix/naming.py` | `naming_contract.v1` compiler, renderer and parser (B1-015) |
 | `src/helix/standards.py` | `client_standards_bundle.v1` loader and digest check (B1-016) |
 | `src/helix/profile/loader.py` | `load_profile()`: refuses a profile with any error before a phase starts |

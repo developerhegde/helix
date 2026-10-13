@@ -35,23 +35,24 @@ Two documents describe `helix.yaml`. The B1 contract (`b1-client-profile-and-doc
 
 - **B1-017**: `client_id` equals the profile directory's name. Error.
 - **B1-018**: an unknown top-level key. Warning.
-- Doctor findings are now sorted by rule id, so the order is stable whatever order the checks run in.
+- **B1-009, extended** (decision 4): every `vault://` reference sits inside `vault.scope`; the `acme-a` fixture is corrected.
+- **B1-019** (decision 9): the `design` block and the naming layout agree with the standards bundle, with the short spellings (`oas3`, `json-logger-module`) accepted as equal.
+- **B1-020** (decision 8): a naming environment's `platform_name` is in `anypoint.environments` exactly when the environment is non-production.
+- **B1-016, extended** (decision 11): the bundle's `files[]` (purposes `denylist`, `skills`, `decision_table`), each beside the bundle with a matching digest.
+- Doctor findings are sorted by rule id, so the order is stable whatever order the checks run in.
 
 ## To build
 
 | Item | From decision |
 | --- | --- |
-| References must sit under `vault.scope`; correct the `acme-a` fixture | 4 |
-| `platform_name` on naming environments and its check against `anypoint.environments` | 8 |
-| The doctor refuses a `design` block, or a naming layout, that disagrees with the standards bundle | 9 |
-| Bundle `files[]` for the deny-list, skills text and decision table, each with a digest | 11 |
-| `onboarding_evidence` rows for the bot-approval proof and for evidence files | 6, 11 |
-| `--scope` and the ONB items on `helix doctor` | 12 |
+| `onboarding_evidence` rows for the bot-approval proof and for evidence files (needs the Helix store, B2) | 6, 11 |
+| `--scope` and the ONB items on `helix doctor` (B2 readiness) | 12 |
 | A profile migration command, before any rename or removal | 9, principle 1 |
+| Consumers of the bundle-listed files: the deny-list scanner (`helix.clientdata`), the skills text and the decision table | 11 |
 
 ## Effect on other documents
 
-- **B1 contract**: gains B1-017 and B1-018.
+- **B1 contract**: gains B1-017 to B1-020 and the extensions to B1-009 and B1-016.
 - **LLD 02**: its §6 rows are closed against this document. Its field reference (§3.4) and example (§3.5) still use the earlier names and are to be re-expressed in the B1 names; until then this document governs.
 - **LLD 00**: `helix profile validate` is withdrawn from the command table.
 - **LLD 07**: the bot-approval proof is recorded in `onboarding_evidence`.

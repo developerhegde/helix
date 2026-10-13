@@ -62,6 +62,8 @@ REMEDIATION = {
     "B1-016": "Reference an approved local client_standards_bundle.v1 with the matching version and SHA-256 digest.",
     "B1-017": "Name the profile directory after client_id, or correct client_id.",
     "B1-018": "Remove the key or correct its spelling; unknown keys are not read.",
+    "B1-019": "Make the profile agree with the approved standards bundle, which is the source for this value.",
+    "B1-020": "List a non-production environment's platform name under anypoint.environments, and never a production one.",
 }
 
 
@@ -212,6 +214,9 @@ def _check_profile(doc: Dict[str, Any], c: _Collector, policy: Policy, now: date
     if client_id is None:
         c.add("B1-003", "client_id", "client_id is missing or malformed.")
 
+    vault_scope: Optional[str] = None
+    anypoint_environments: Optional[List[str]] = None
+
     # B1-004 model route
     provider = region = None
     phases: Dict[str, Any] = {}
@@ -272,11 +277,14 @@ def _check_profile(doc: Dict[str, Any], c: _Collector, policy: Policy, now: date
 
     # B1-007 Jira
     jira_bot = None
+    references: Dict[str, str] = {}
     jira = c.section("B1-007", doc, "jira")
     if jira is not None:
         c.text("B1-007", jira, "jira", "cloud_id")
         c.text("B1-007", jira, "jira", "project_key", PROJECT_KEY_RE)
-        c.text("B1-007", jira, "jira", "webhook_secret_ref", VAULT_REF_RE)
+        reference = c.text("B1-007", jira, "jira", "webhook_secret_ref", VAULT_REF_RE)
+        if reference is not None:
+            references["jira.webhook_secret_ref"] = reference
         jira_bot = c.text("B1-007", jira, "jira", "bot_account_id")
         statuses = jira.get("statuses")
         if isinstance(statuses, dict):
@@ -305,13 +313,17 @@ def _check_profile(doc: Dict[str, Any], c: _Collector, policy: Policy, now: date
             value = c.text("B1-009", vault, "vault", key, pattern)
             if value is not None and secrets.looks_secret(value):
                 c.add("B1-009", f"vault.{key}", "Value looks like a secret, not an opaque identifier.")
+            elif key == "scope":
+                vault_scope = value
 
     # B1-010 to B1-012 Anypoint
     anypoint = c.section("B1-010", doc, "anypoint")
     if anypoint is not None:
         c.text("B1-010", anypoint, "anypoint", "business_group_id")
-        c.text("B1-010", anypoint, "anypoint", "connected_app_ref", VAULT_REF_RE)
-        environments = c.strings("B1-010", anypoint, "anypoint", "environments")
+        reference = c.text("B1-010", anypoint, "anypoint", "connected_app_ref", VAULT_REF_RE)
+        if reference is not None:
+            references["anypoint.connected_app_ref"] = reference
+        environments = anypoint_environments = c.strings("B1-010", anypoint, "anypoint", "environments")
         expiry = _expiry(anypoint.get("secret_expiry"))
         if expiry is None:
             c.add("B1-010", "anypoint.secret_expiry", "Secret expiry is missing or not an ISO-8601 timestamp.")
@@ -325,6 +337,11 @@ def _check_profile(doc: Dict[str, Any], c: _Collector, policy: Policy, now: date
                 c.add("B1-012", "anypoint.secret_expiry",
                       f"Connected-app secret expires within {policy.expiry_warning_days} days.", "warning")
 
+    if vault_scope is not None:  # B1-009: a reference names a secret inside this client's scope, nowhere else
+        for path, reference in references.items():
+            if not _under_scope(reference, vault_scope):
+                c.add("B1-009", path, "Reference is outside the vault scope.")
+
     # B1-013 design defaults and gate owners
     design = c.section("B1-013", doc, "design")
     if design is not None:
@@ -335,17 +352,22 @@ def _check_profile(doc: Dict[str, Any], c: _Collector, policy: Policy, now: date
         for gate in GATES:
             c.strings("B1-013", gates, "gates", gate)
 
+    contract = None
     try:
-        compile_contract(doc.get("naming"))
+        contract = compile_contract(doc.get("naming"))
     except NamingInvalid:
         c.add("B1-015", "naming", "Naming block is missing or violates naming_contract.v1.")
+    else:
+        _check_platform_names(doc["naming"]["environments"], anypoint_environments, c)
 
     if client_id is not None:
         reference = doc.get("standards")
         try:
-            load_standards(profile_dir, client_id, reference)
+            bundle = load_standards(profile_dir, client_id, reference)
         except StandardsInvalid:
             c.add("B1-016", "standards", "Standards bundle is missing or violates client_standards_bundle.v1.")
+        else:
+            _check_agreement(doc, contract, bundle.data, c)
         if os.path.basename(os.path.normpath(profile_dir)) != client_id:
             c.add("B1-017", "client_id", "client_id differs from the profile directory's name.")
     for key in doc:
@@ -353,6 +375,49 @@ def _check_profile(doc: Dict[str, Any], c: _Collector, policy: Policy, now: date
             c.add("B1-018", str(key), "Key is not part of the profile schema and is ignored.", "warning")
 
     return client_id
+
+
+_CONTRACT_FORMATS = {"oas3": "oas30", "raml": "raml10"}  # the profile's short spellings of the bundle's values
+
+
+def _under_scope(reference: str, scope: str) -> bool:
+    segments, base = reference[len("vault://"):].split("/"), scope.split("/")
+    return "." not in segments and ".." not in segments and len(segments) > len(base) and segments[:len(base)] == base
+
+
+def _check_platform_names(environments: Any, allowed: Optional[List[str]], c: _Collector) -> None:
+    """B1-020. The naming block is the one list of environments; `anypoint.environments` allows their platform names."""
+    for i, item in enumerate(environments):
+        if "platform_name" not in item:
+            continue
+        name, path = item["platform_name"], f"naming.environments[{i}].platform_name"
+        if not isinstance(name, str) or not name.strip():
+            c.add("B1-020", path, "Platform name is not text.")
+        elif allowed is not None and item["production"] and name in allowed:
+            c.add("B1-020", path, "A production environment's platform name is allowed under anypoint.environments.")
+        elif allowed is not None and not item["production"] and name not in allowed:
+            c.add("B1-020", path, "Platform name is not listed under anypoint.environments.")
+
+
+def _check_agreement(doc: Dict[str, Any], contract: Any, bundle: Any, c: _Collector) -> None:
+    """B1-019. Where the profile and the standards bundle state the same fact, the bundle is the source."""
+    def section(source: Any, name: str) -> Dict[str, Any]:
+        value = source.get(name)
+        return value if isinstance(value, dict) else {}
+
+    def differs(stated: Any, expected: Any) -> bool:
+        if not isinstance(stated, str) or not isinstance(expected, str):
+            return False  # a fact only one side states cannot disagree
+        normal = [_CONTRACT_FORMATS.get(v, v).replace("-", "_") for v in (stated, expected)]
+        return normal[0] != normal[1]
+
+    design = section(doc, "design")
+    if differs(design.get("contract_format"), section(bundle, "api").get("default_contract")):
+        c.add("B1-019", "design.contract_format", "Contract format differs from the standards bundle.")
+    if differs(design.get("logging"), section(bundle, "logging").get("style")):
+        c.add("B1-019", "design.logging", "Logging style differs from the standards bundle.")
+    if contract is not None and differs(contract.layout, section(bundle, "configuration").get("layout")):
+        c.add("B1-019", "naming.configuration.layout", "Configuration layout differs from the standards bundle.")
 
 
 def evaluate(profile_dir: str, *, now: Optional[datetime] = None,

@@ -137,9 +137,9 @@ rules:                                   # the registry: one entry per approved 
   - {id: STD-LOG-03, strength: blocking, form: checklist, checked_by: reviewer}
 ```
 
-`configuration.layout` here records what the standard requires. The layout Helix acts on is the profile's `naming.configuration.layout`, because it is bound by the naming-contract digest; the doctor should refuse a profile where the two differ (not yet built).
+`configuration.layout` here records what the standard requires. The layout Helix acts on is the profile's `naming.configuration.layout`, because it is bound by the naming-contract digest; the doctor refuses a profile where the two differ (B1-019).
 
-The bundle also lists the other client-supplied files under `standards/` by path and digest (`files[]`: the deny-list, the skills text, the decision table), so the profile directory holds nothing Helix reads that is not either `helix.yaml` or named by the bundle (profile schema reconciliation, decision 11; to build).
+The bundle also lists the other client-supplied files under `standards/` by path and digest (`files[]`: the deny-list, the skills text, the decision table), so the profile directory holds nothing Helix reads that is not either `helix.yaml` or named by the bundle (profile schema reconciliation, decision 11; checked by B1-016). Each entry is `{path, purpose, sha256}`, with `path` relative to the bundle and `purpose` one of `denylist`, `skills`, `decision_table`.
 
 A rule with `checked_by: reviewer` appears in the pull request as a checklist line; Helix never marks it passed. A rule with `checked_by: helix` names the validator code that fails when it is broken, so a rule without a built check is visible as such.
 

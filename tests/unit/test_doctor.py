@@ -1,8 +1,11 @@
+import hashlib
 import json
 import os
 import tempfile
 import unittest
 from datetime import timedelta
+
+import yaml
 
 from helix import product_identity as pid
 from helix.profile.doctor import run_doctor
@@ -168,6 +171,58 @@ class DoctorTest(unittest.TestCase):
         renamed = os.path.join(os.path.dirname(self.profile()), "acme-other")
         os.rename(os.path.join(os.path.dirname(renamed), "acme-a"), renamed)
         self.assertEqual(self.ids(renamed), ["B1-017"])
+
+    def rebundle(self, change, files=()):
+        """A profile whose standards bundle was changed and re-pinned by its new digest."""
+        root = self.profile()
+        standards = os.path.join(root, "standards")
+        for name, text in files:
+            with open(os.path.join(standards, name), "w", encoding="utf-8") as handle:
+                handle.write(text)
+        with open(os.path.join(standards, "bundle.yaml"), encoding="utf-8") as handle:
+            bundle = yaml.safe_load(handle)
+        change(bundle)
+        raw = yaml.safe_dump(bundle, sort_keys=False).encode("utf-8")
+        with open(os.path.join(standards, "bundle.yaml"), "wb") as handle:
+            handle.write(raw)
+        path = os.path.join(root, pid.PROFILE_FILENAME)
+        with open(path, encoding="utf-8") as handle:
+            doc = yaml.safe_load(handle)
+        doc["standards"]["sha256"] = hashlib.sha256(raw).hexdigest()
+        with open(path, "w", encoding="utf-8") as handle:
+            yaml.safe_dump(doc, handle, sort_keys=False)
+        return root
+
+    def test_references_stay_inside_the_vault_scope(self):
+        for reference in ("vault://acme-b/profile/jira-webhook", "vault://acme-a/profile/../acme-b/jira-webhook",
+                          "vault://acme-a/profile"):
+            with self.subTest(reference):
+                root = self.profile(lambda d: d["jira"].update(webhook_secret_ref=reference))
+                self.assertEqual(self.paths(root, "B1-009"), ["jira.webhook_secret_ref"])
+
+    def test_profile_agrees_with_the_standards_bundle(self):
+        self.assertEqual(self.paths(self.profile(lambda d: d["design"].update(logging="acme-text-logger")), "B1-019"),
+                         ["design.logging"])
+        root = self.rebundle(lambda b: b.update(api={"default_contract": "raml10"},
+                                                configuration={"layout": "deployment_properties"}))
+        self.assertEqual(self.paths(root, "B1-019"), ["design.contract_format", "naming.configuration.layout"])
+        self.assertEqual(self.ids(self.rebundle(lambda b: b.update(api={"default_contract": "oas30"}))), [])
+
+    def test_platform_names_follow_the_anypoint_allow_list(self):
+        unknown = self.profile(lambda d: d["naming"]["environments"][0].update(platform_name="acme-unlisted"))
+        self.assertEqual(self.paths(unknown, "B1-020"), ["naming.environments[0].platform_name"])
+        production = self.profile(lambda d: d["naming"]["environments"][2].update(platform_name="acme-sandbox"))
+        self.assertEqual(self.paths(production, "B1-020"), ["naming.environments[2].platform_name"])
+
+    def test_bundle_lists_other_client_files_by_digest(self):
+        text = "acme-denied-token\n"
+        entry = {"path": "denylist.txt", "purpose": "denylist", "sha256": hashlib.sha256(text.encode()).hexdigest()}
+        listed = (("denylist.txt", text),)
+        self.assertEqual(self.ids(self.rebundle(lambda b: b.update(files=[entry]), listed)), [])
+        for bad in ({**entry, "sha256": "0" * 64}, {**entry, "path": "../" + pid.PROFILE_FILENAME},
+                    {**entry, "purpose": "acme-other"}, {**entry, "path": "absent.txt"}):
+            with self.subTest(bad):
+                self.assertEqual(self.ids(self.rebundle(lambda b: b.update(files=[bad]), listed)), ["B1-016"])
 
     def test_every_independent_defect_in_one_run(self):
         def breakage(d):
