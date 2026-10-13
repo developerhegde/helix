@@ -622,16 +622,17 @@ Artefact names carry `github.run_id`, so two dispatches of one ticket never shar
 
 ### 3.10 CI policy for this repository `[PLAN]` minutes are money, `[LLD]` the mechanics
 
+> Owner decision, 2026-10-13: no workflow runs on GitHub for now. Every test runs on the development machines (macOS and Windows), and no `ci.yml` is checked in. The policy below is what applies if a workflow is added later.
+
 | Trigger | Runs | Runner |
 | --- | --- | --- |
 | Local, before every commit | `tests/unit`, `tests/guards`, `tests/contract`, then `scripts/check_client_data.py` after `git add`, exit status checked `[PLAN]` | Developer machine, free |
 | `workflow_dispatch` on `ci.yml`, input `suite` | One of `unit`, `contract`, `guards`, `integration` (recorded Maven) or `all` | `ubuntu-24.04` only |
 | Push to `test` branch (release gate) | `all` | `ubuntu-24.04` only |
-| `pull_request`, only while this repository is public (owner decision, 2026-10-13) | `all` | `ubuntu-24.04` and `windows-latest` |
 | `workflow_dispatch` with `maven_live: true`, environment `maven-live` | `tests/integration/maven` with `HELIX_MAVEN_LIVE=1` against `acme-order-sapi`, through a Maven proxy holding the **owner's** EE Nexus credential | `ubuntu-24.04` |
 | `workflow_dispatch` on `images.yml` | Build, scan, smoke-test, push the three images, update `images.lock` in a PR | `ubuntu-24.04` |
 
-- Never on `push` to other branches `[PLAN]`. Pull-request runs are allowed only while the repository is public, where standard runners cost nothing; each job carries that condition, so a private repository returns to on-demand runs with no edit. Windows runs on pull requests only, because Helix is also developed on Windows and digest-pinned files must match there. Owner decision, 2026-10-13, amending the plan's "minutes are money" rule for this repository's own tests. A guard lints `ci.yml` (G28; built as `CiPolicyGuard`).
+- Never on `push` to other branches, never on `pull_request`, never on Windows `[PLAN]`. A guard lints `ci.yml` (G28).
 - **Maven** `[PLAN]`: the suite replays recordings in `tests/integration/maven/recordings/*.json` (command, exit code, MUnit and coverage summaries) through a fake `mvn` on `PATH`. The live run happens at least once per sub-phase. Its date, commit and result go in that sub-phase's done note, and a docs test checks the line is present for every closed sub-phase (G23).
 - **Deny-list** `[PLAN]` a deny-list per client, never committed; `[LLD]` the union and the CI secret. The tripwire reads the union of per-client deny-lists from `$HELIX_PROFILES_ROOT/*/denylist.txt` locally, and from the `HELIX_CLIENT_DENYLIST` secret in this repository's CI (10 §3.13 names it). Holding every client's asset names in one owner-held secret is this LLD's choice, not the plan's. What the tripwire does without a list is 10 §3.13's rule. Its rules come from the Helix-owned module `helix.clientdata`, which is still to build (§3.5).
 - CI minutes per suite are recorded after the first run of each; no estimate is given here.
