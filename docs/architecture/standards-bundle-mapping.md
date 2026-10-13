@@ -28,16 +28,18 @@ This document turns every rule of the standards document into one entry, as `cli
 
 | Status | Rules |
 | --- | --- |
-| Built | 8 |
-| Partly built | 7 |
+| Built | 30 |
+| Partly built | 9 |
 | Designed | 14 |
-| To design | 42 |
+| To design | 18 |
 | Reviewer | 16 |
 | Outside Helix | 6 |
 | Deviation | 1 |
 | **Total** | **94** |
 
-Of the 94 rules (87 Blocking, 7 Advisory), 71 are for Helix to check automatically, 16 stay with a reviewer, 6 belong to the client's pipeline or platform, and 1 is an accepted deviation in B2. 15 of the 71 are fully or partly built today.
+Of the 94 rules (87 Blocking, 7 Advisory), 71 are for Helix to check automatically, 16 stay with a reviewer, 6 belong to the client's pipeline or platform, and 1 is an accepted deviation in B2. 39 of the 71 are fully or partly built today.
+
+*Built* means the validator enforces the rule when the staged `validation_policy.v1` carries its setting. Each standards check is switched on by a policy field, and `helix stage` compiles the policy from the approved bundle, so a rule is enforced for a client once its bundle carries the field.
 
 ## Naming
 
@@ -49,20 +51,20 @@ Of the 94 rules (87 Blocking, 7 Advisory), 71 are for Helix to check automatical
 | STD-NAM-04 | API base path is `/api/v<major>/<resource>` | B | Validation | Helix | To design |
 | STD-NAM-05 | Mule files are `global.xml`, `<name>-api.xml`, `<resource>-impl.xml`, `error-handler.xml` | B | Setting and Template | Helix | To design (D3: Helix follows the standard) |
 | STD-NAM-06 | APIkit flows keep their generated names | B | Validation: one flow per contract operation, name unchanged | Helix | Designed |
-| STD-NAM-07 | Implementation flow is `<verb>-<resource>-flow` | B | Validation: pattern | Helix | To design |
-| STD-NAM-08 | Sub-flow is `<action>-<object>-subflow` | B | Validation: pattern | Helix | To design |
-| STD-NAM-09 | Connector configuration is `<system>-<connector>-config`; the listener is `http-listener-config` | B | Validation: pattern | Helix | To design |
-| STD-NAM-10 | Property key is a lowercase dot path; secrets are read as `${secure::<key>}` | B | Validation | Helix | Partly built: the secure reference is checked; the key pattern is not |
-| STD-NAM-11 | Flow variables are camelCase | B | Validation: pattern | Helix | To design |
-| STD-NAM-12 | DataWeave script is `dwl/<resource>/<purpose>.dwl`, kebab-case | B | Validation: path pattern | Helix | To design |
-| STD-NAM-13 | DataWeave module is `modules/<Module>.dwl` | B | Validation: path pattern | Helix | To design |
-| STD-NAM-14 | Custom error type is `APP:<UPPER_SNAKE_REASON>` | B | Validation: pattern | Helix | To design |
+| STD-NAM-07 | Implementation flow is `<verb>-<resource>-flow` | B | Validation: pattern | Helix | Built (`patterns.implementation_flow`; APIkit's generated flows are exempt) |
+| STD-NAM-08 | Sub-flow is `<action>-<object>-subflow` | B | Validation: pattern | Helix | Built (`patterns.sub_flow`) |
+| STD-NAM-09 | Connector configuration is `<system>-<connector>-config`; the listener is `http-listener-config` | B | Validation: pattern | Helix | Built (`patterns.connector_config`; the APIkit router's own name is exempt) |
+| STD-NAM-10 | Property key is a lowercase dot path; secrets are read as `${secure::<key>}` | B | Validation | Helix | Built: the secure reference and `patterns.property_key` |
+| STD-NAM-11 | Flow variables are camelCase | B | Validation: pattern | Helix | Built (`patterns.flow_variable`) |
+| STD-NAM-12 | DataWeave script is `dwl/<resource>/<purpose>.dwl`, kebab-case | B | Validation: path pattern | Helix | Built (`patterns.dataweave_script`) |
+| STD-NAM-13 | DataWeave module is `modules/<Module>.dwl` | B | Validation: path pattern | Helix | Built (`patterns.dataweave_module`) |
+| STD-NAM-14 | Custom error type is `APP:<UPPER_SNAKE_REASON>` | B | Validation: pattern | Helix | Built (`patterns.error_type`, on raised errors) |
 | STD-NAM-15 | MQ destination is `<domain>-<event>-<env>`; dead-letter queue is `dlq-<queue>` | B | Setting and Template | Helix | To design |
-| STD-NAM-16 | Object Store is `<purpose>-os` | B | Validation: pattern | Helix | To design |
+| STD-NAM-16 | Object Store is `<purpose>-os` | B | Validation: pattern | Helix | Built (`patterns.object_store`) |
 | STD-NAM-17 | API Manager client application is `<consumer>-<env>` | B | Guidance | Client | Outside Helix |
 | STD-NAM-18 | Branch is `feature/…`, `bugfix/…`, `hotfix/…` or `release/<semver>` | B | Setting | Helix | To design (D4: the pattern comes from the bundle) |
 | STD-NAM-19 | Commit message is `<TICKET>: imperative summary`, at most 72 characters | B | Template | Helix | To design |
-| STD-NAM-20 | Kebab-case everywhere except modules, flow variables and error reasons | B | Validation: covered by 07 to 14 | Helix | To design |
+| STD-NAM-20 | Kebab-case everywhere except modules, flow variables and error reasons | B | Validation: covered by 07 to 14 | Helix | Built: through 07 to 14 and 16 |
 | STD-NAM-21 | No environment token in a repository, Exchange asset or `artifactId` | B | Validation | Helix | Built: the naming contract refuses `environment` in the repository form |
 | STD-NAM-22 | A new major version is a new repository and `artifactId` | B | Checklist, at the design gate | Reviewer | Reviewer |
 | STD-NAM-23 | APIkit flow names are never changed | B | Validation: same check as 06 | Helix | Designed |
@@ -72,25 +74,25 @@ Of the 94 rules (87 Blocking, 7 Advisory), 71 are for Helix to check automatical
 
 | ID | Rule | S | Form | Checked by | Status |
 | --- | --- | --- | --- | --- | --- |
-| STD-POM-01 | Inherit the approved parent POM; the child holds only application-specific content | B | Setting `project.golden_parent` and Validation | Helix | Partly built: parent, repositories and plugins are checked; versions in the child are not |
-| STD-POM-02 | Mule 4.9 LTS and Java 17 | B | Setting and Validation | Helix | Partly built: the runtime is checked; Java is not |
-| STD-POM-03 | Plugin, connector, library and coverage versions are pinned in the parent | B | Validation: the child declares no version | Helix | To design |
-| STD-POM-04 | `groupId` is the organisation or business-group ID; semantic versioning | B | Setting and Validation | Helix | To design |
-| STD-POM-05 | No version ranges, `LATEST` or `RELEASE` | B | Validation | Helix | To design |
-| STD-POM-06 | Approved connectors and shared libraries only | B | Setting `connectors.allowed` and Validation | Helix | To design |
+| STD-POM-01 | Inherit the approved parent POM; the child holds only application-specific content | B | Setting `project.golden_parent` and Validation | Helix | Built: parent, repositories, plugins, and no version in the child (`POM_VERSION_DECLARED`) |
+| STD-POM-02 | Mule 4.9 LTS and Java 17 | B | Setting and Validation | Helix | Built: the runtime in the POM, and Java through `mule-artifact.json` |
+| STD-POM-03 | Plugin, connector, library and coverage versions are pinned in the parent | B | Validation: the child declares no version | Helix | Built (`POM_VERSION_DECLARED`) |
+| STD-POM-04 | `groupId` is the organisation or business-group ID; semantic versioning | B | Setting and Validation | Helix | Built (`POM_GROUP_MISMATCH`, `POM_VERSION_NOT_SEMVER`, `POM_ARTIFACT_MISMATCH`) |
+| STD-POM-05 | No version ranges, `LATEST` or `RELEASE` | B | Validation | Helix | Built (`POM_VERSION_RANGE`, always on) |
+| STD-POM-06 | Approved connectors and shared libraries only | B | Setting `connectors.allowed` and Validation | Helix | Partly built: connectors are checked by Maven coordinates (`POM_CONNECTOR_NOT_ALLOWED`); shared libraries are not |
 | STD-POM-07 | The API specification comes from Exchange as a dependency, never copied into the project | B | Setting | Helix | Deviation (D2: in B2 the contract stays in the project and the pull request records it) |
 | STD-POM-08 | JDBC drivers and similar JARs go through `sharedLibraries` | B | Validation | Helix | To design |
 | STD-POM-09 | Test-only dependencies have test scope; unused dependencies are removed | A | Checklist | Reviewer | Reviewer |
-| STD-POM-10 | `mule-artifact.json` declares the minimum Mule version, Java 17 and every secure property | B | Template and Validation | Helix | To design |
+| STD-POM-10 | `mule-artifact.json` declares the minimum Mule version, Java 17 and every secure property | B | Template and Validation | Helix | Built (`MULE_ARTIFACT_INVALID`) |
 
 ## Build and deployment
 
 | ID | Rule | S | Form | Checked by | Status |
 | --- | --- | --- | --- | --- | --- |
 | STD-BLD-01 | Shared environments are deployed only through the pipeline | B | Guidance | Client | Outside Helix (deployment is B6) |
-| STD-BLD-02 | Pipeline variables set environment, name and sizing; no per-environment Maven profiles | B | Validation: no `profiles` in the child POM | Helix | To design |
+| STD-BLD-02 | Pipeline variables set environment, name and sizing; no per-environment Maven profiles | B | Validation: no `profiles` in the child POM | Helix | Built (`POM_PROFILE_DECLARED`) |
 | STD-BLD-03 | Platform credentials never appear in a POM | B | Validation: secret scan | Helix | Designed (LLD 07 §3.4.5) |
-| STD-BLD-04 | `finalName` is not overridden | B | Validation | Helix | To design |
+| STD-BLD-04 | `finalName` is not overridden | B | Validation | Helix | Built (`POM_FINAL_NAME_OVERRIDDEN`) |
 | STD-BLD-05 | Tests run before packaging | A | Template: verify stage order | Helix | Designed (LLD 07 §3.6) |
 
 ## APIkit and API design
@@ -101,7 +103,7 @@ Of the 94 rules (87 Blocking, 7 Advisory), 71 are for Helix to check automatical
 | STD-API-02 | The specification passes the Anypoint Best Practices ruleset with no violation | B | Validation, in the design phase | Helix | Designed (LLD 06) |
 | STD-API-03 | Reuse the organisation's Exchange fragments; no local copy | B | Setting: fragment list; Checklist | Reviewer | Reviewer |
 | STD-API-04 | Plural nouns, path and query parameter use, camelCase fields, ISO-8601 UTC times, currency codes, documented responses | B | Validation where the ruleset covers it; Checklist for the rest | Helix and Reviewer | Designed |
-| STD-API-05 | One APIkit router; generated flows only delegate; request validation stays on | B | Validation | Helix | To design |
+| STD-API-05 | One APIkit router; generated flows only delegate; request validation stays on | B | Validation | Helix | Partly built: one router and request validation are checked; that generated flows only delegate is not |
 | STD-API-06 | Console state, base path, correlation ID, autodiscovery and APIkit error mapping come from properties and the global configuration | B | Template and Validation | Helix | To design |
 
 ## Configuration and secrets
@@ -112,14 +114,14 @@ Of the 94 rules (87 Blocking, 7 Advisory), 71 are for Helix to check automatical
 | STD-CFG-02 | Environment values are deployment properties from the pipeline; every environment has the same keys | B | Setting | Helix | Built: no environment file is allowed and `KEY_ENVIRONMENTS_UNEVEN` refuses uneven keys; the pipeline's own override sets stay with the client |
 | STD-CFG-03 | Secrets live in `config-secure.yaml` and are read as `${secure::<key>}` | B | Setting | Helix | Built: one secure file, read as `${secure::<key>}` |
 | STD-CFG-04 | No hard-coded host, port, path, credential, timeout, pool size, cron, queue or flag | B | Validation: literal scan | Helix | Designed (LLD 07, `LITERAL_CONFIG_VALUE`) |
-| STD-CFG-05 | Feature flags are `feature.<name>.enabled`, default `false` | A | Validation: pattern | Helix | To design |
+| STD-CFG-05 | Feature flags are `feature.<name>.enabled`, default `false` | A | Validation: pattern | Helix | Built (`patterns.feature_flag`; the default value is not checked) |
 | STD-CFG-06 | API Manager resources and queues are created by the pipeline; `api.id` is captured | A | Guidance | Client | Outside Helix |
 | STD-SEC-01 | The real `secure.key` never appears in a file, POM, log or test resource | B | Validation: it is a deployment property, defined in no file | Helix | Built |
 | STD-SEC-02 | A dummy `secure.key` exists only in the parent POM's test configuration | B | Setting | Helix | Designed |
 | STD-SEC-03 | Every secret is encrypted and read only as `${secure::<key>}` | B | Validation | Helix | Built |
 | STD-SEC-04 | A plaintext secret anywhere is Blocking and is rotated the same day | B | Validation; rotation is the client's | Helix and Client | Partly built: configuration files are scanned; history is designed |
 | STD-SEC-05 | One encryption key per environment, in the secret store | B | Guidance | Client | Outside Helix |
-| STD-SEC-06 | `secureProperties` lists every secure property and `secure.key` | B | Template and Validation | Helix | To design |
+| STD-SEC-06 | `secureProperties` lists every secure property and `secure.key` | B | Template and Validation | Helix | Built (`MULE_ARTIFACT_INVALID`) |
 | STD-SEC-07 | Private keys for UAT and production are never committed; truststores may be | B | Validation: forbidden file types | Helix | To design |
 | STD-SEC-08 | Local defaults and test overrides hold synthetic credentials only | B | Validation: fixture allowlist | Helix | Designed |
 | STD-SEC-09 | `settings.xml`, `.env`, `*.key` and local overrides are ignored by Git | B | Template | Helix | To design |
@@ -128,14 +130,14 @@ Of the 94 rules (87 Blocking, 7 Advisory), 71 are for Helix to check automatical
 
 | ID | Rule | S | Form | Checked by | Status |
 | --- | --- | --- | --- | --- | --- |
-| STD-LOG-01 | JSON logging through the organisation's module or one `log-event` sub-flow; no free-text `<logger>` | B | Setting `logging.style`, `logging.module`; Validation | Helix | Partly built: B1-016 requires the setting; the project is not scanned |
+| STD-LOG-01 | JSON logging through the organisation's module or one `log-event` sub-flow; no free-text `<logger>` | B | Setting `logging.style`, `logging.module`; Validation | Helix | Built: B1-016 requires the setting and `FREE_TEXT_LOGGER` scans the project |
 | STD-LOG-02 | Each event carries the required fields | B | Setting `logging.required_fields`; Template | Helix | Partly built: the setting exists; nothing checks the project |
 | STD-LOG-03 | Log request receipt, each outbound call, completion and handled errors | B | Checklist | Reviewer | Reviewer |
 | STD-LOG-04 | Production level is INFO; DEBUG only in dev and test; no TRACE | B | Validation, on `log4j2.xml` | Helix | To design |
 | STD-LOG-05 | Never log secrets, authorisation headers, personal data or unmasked payloads | B | Checklist | Reviewer | Reviewer |
 | STD-LOG-06 | Keep Mule's correlation ID; adopt and forward `x-correlation-id` | B | Checklist | Reviewer | Reviewer |
-| STD-ERR-01 | One global error handler in `error-handler.xml`; flows define none of their own | B | Validation | Helix | To design |
-| STD-ERR-02 | `on-error-propagate` by default; a continue path needs a fallback, named types, a WARN log and a reason | B | Validation: no continue on `ANY`; Checklist for the reason | Helix and Reviewer | To design |
+| STD-ERR-01 | One global error handler in `error-handler.xml`; flows define none of their own | B | Validation | Helix | Built (`ERROR_HANDLER_MISPLACED`) |
+| STD-ERR-02 | `on-error-propagate` by default; a continue path needs a fallback, named types, a WARN log and a reason | B | Validation: no continue on `ANY`; Checklist for the reason | Helix and Reviewer | Partly built: a continue on every error type is refused (`ON_ERROR_CONTINUE_ANY`); the reason stays with the reviewer |
 | STD-ERR-03 | Business errors are `APP:<REASON>`; connector errors are translated at the boundary | B | Checklist | Reviewer | Reviewer |
 | STD-ERR-04 | Retry only idempotent operations; retry settings come from properties | B | Checklist | Reviewer | Reviewer |
 | STD-ERR-05 | Event-driven failures reach nack or dead-letter handling | B | Checklist | Reviewer | Reviewer |
@@ -147,7 +149,7 @@ Of the 94 rules (87 Blocking, 7 Advisory), 71 are for Helix to check automatical
 
 | ID | Rule | S | Form | Checked by | Status |
 | --- | --- | --- | --- | --- | --- |
-| STD-CON-01 | Approved connectors only, each configured once in the global file | B | Setting and Validation | Helix | To design |
+| STD-CON-01 | Approved connectors only, each configured once in the global file | B | Setting and Validation | Helix | Partly built: approved connectors through the POM; one configuration per system is not checked |
 | STD-CON-02 | Host, port, path, credentials, timeout and reconnection come from properties | B | Validation | Helix | To design |
 | STD-CON-03 | HTTP requests have explicit timeouts and keep standard response validation | B | Validation | Helix | To design |
 | STD-CON-04 | Database: parameterised queries, explicit columns, pooling, timeouts | B | Checklist | Reviewer | Reviewer |
@@ -158,10 +160,10 @@ Of the 94 rules (87 Blocking, 7 Advisory), 71 are for Helix to check automatical
 
 | ID | Rule | S | Form | Checked by | Status |
 | --- | --- | --- | --- | --- | --- |
-| STD-TST-01 | One suite per implementation file in `src/test/munit/`, with behaviour, execution and validation sections | B | Validation | Helix | To design |
+| STD-TST-01 | One suite per implementation file in `src/test/munit/`, with behaviour, execution and validation sections | B | Validation | Helix | Partly built: a suite per implementation file (`TEST_SUITE_MISSING`); the three sections are not checked |
 | STD-TST-02 | Every external system is mocked by `doc:name`; the flow under test, transforms and the router are never mocked | B | Validation | Helix | Designed (LLD 07 §3.5.2) |
 | STD-TST-03 | Tests cover scripts, validations, raised errors, the global handler, operations and acknowledgement paths | B | Validation for mappings; Checklist for the rest | Helix and Reviewer | Designed |
-| STD-TST-04 | Tests are independent, never sleep, clear state, and ignore nothing without a ticket | B | Validation | Helix | To design |
+| STD-TST-04 | Tests are independent, never sleep, clear state, and ignore nothing without a ticket | B | Validation | Helix | Partly built: sleeps and ignored tests without a ticket; independence and cleared state are not |
 | STD-TST-05 | Test resources hold synthetic data only | B | Validation: fixture allowlist | Helix | Designed |
 | STD-TST-06 | The build fails below 75% application, 50% resource and 50% flow coverage | B | Setting and Validation | Helix | Partly built: application coverage is checked; resource and flow are not in the evidence |
 | STD-TST-07 | A new coverage exclusion needs a reason and approval; APIkit flows are never excluded | B | Validation: the child POM declares no exclusion | Helix | To design |
@@ -182,5 +184,5 @@ Of the 94 rules (87 Blocking, 7 Advisory), 71 are for Helix to check automatical
 
 1. Carry the branch pattern (D4) through LLD 01, 02, 03, 06 and 07, which still assume the old branch name.
 2. Add the approved rules to the bundle as its `rules[]` registry, each with this document's identifier.
-3. Design the 40 *To design* rules as validator checks, starting with the POM and naming patterns, which need no new input.
+3. Design the remaining 18 *To design* rules.
 4. Regenerate the `acme-a` fixture bundle and its digest.

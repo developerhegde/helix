@@ -36,7 +36,7 @@ FILES = {
     CONFIG + "config-sit.yaml": "orders.host: ${HELIX_SET_SIT}\n",
     CONFIG + "config-secure-dev.yaml": "orders.password: ${HELIX_ENCRYPT_DEV}\n",
     CONFIG + "config-secure-sit.yaml": "orders.password: ${HELIX_ENCRYPT_SIT}\n",
-    "src/main/mule/global.xml": '<mule><configuration-properties file="config/config.yaml"/>'
+    "src/main/mule/global.xml": '<mule xmlns:secure-properties="http://www.mulesoft.org/schema/mule/secure-properties"><configuration-properties file="config/config.yaml"/>'
                                 '<configuration-properties file="config/config-${env}.yaml"/>'
                                 '<secure-properties:config file="config/config-secure-${env}.yaml" key="${secure.key}"/></mule>\n',
     "src/main/mule/order.xml": "<mule>${orders.base} ${orders.host} ${secure::orders.password}</mule>\n",
@@ -184,7 +184,7 @@ class DeploymentPropertiesLayoutTest(NamingValidationTest):
         os.rmdir(os.path.join(self.project, *CONFIG.rstrip("/").split("/")))
         self.write(ROOT + "config.yaml", "orders.base: base\norders.host: ${HELIX_SET_DEV}\n")
         self.write(ROOT + "config-secure.yaml", "orders.password: ${HELIX_ENCRYPT_DEV}\n")
-        self.write("src/main/mule/global.xml", '<mule><configuration-properties file="config.yaml"/>'
+        self.write("src/main/mule/global.xml", '<mule xmlns:secure-properties="http://www.mulesoft.org/schema/mule/secure-properties"><configuration-properties file="config.yaml"/>'
                    '<secure-properties:config file="config-secure.yaml" key="${secure.key}"/></mule>\n')
 
     def bundle(self):

@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import os
+import re
 import xml.etree.ElementTree as ET
-from typing import Any
+from typing import Any, Mapping, Optional
+
+_SEMVER = re.compile(r"\d+\.\d+\.\d+(?:-SNAPSHOT)?")
 
 
-def check(project_dir: str, policy: dict[str, Any]) -> list[tuple[str, str]]:
+def check(project_dir: str, policy: dict[str, Any], bundle: Optional[Mapping[str, Any]] = None) -> list[tuple[str, str]]:
     path = os.path.join(project_dir, "pom.xml")
     if not os.path.isfile(path):
         return [("POM_MISSING", "pom.xml is missing.")]
@@ -34,6 +37,38 @@ def check(project_dir: str, policy: dict[str, Any]) -> list[tuple[str, str]]:
     runtime = policy.get("maven", {}).get("mule_runtime")
     if runtime and runtime not in _text_content(root):
         failures.append(("POM_RUNTIME_MISSING", "POM does not declare the approved Mule runtime."))
+    failures.extend(_child_rules(root, ns, policy.get("maven", {}), bundle or {}))
+    return failures
+
+
+def _child_rules(root: ET.Element, ns: str, maven: Mapping[str, Any], bundle: Mapping[str, Any]) -> list[tuple[str, str]]:
+    """Rules from the client standards. The version-range rule always runs; the rest are switched on by the policy."""
+    failures: list[tuple[str, str]] = []
+    local = lambda element: element.tag.rsplit("}", 1)[-1]
+    versions = [(element.text or "").strip() for element in root.iter() if local(element) == "version"]
+    if any(value in ("LATEST", "RELEASE") or any(mark in value for mark in "[(,") for value in versions):
+        failures.append(("POM_VERSION_RANGE", "POM uses a version range, LATEST or RELEASE."))
+    child = maven.get("child_pom") if isinstance(maven.get("child_pom"), dict) else {}
+    pinned = [element for element in root.iter() if local(element) in ("dependency", "plugin")
+              and any(local(item) == "version" for item in element)]
+    if child.get("forbid_versions") and pinned:
+        failures.append(("POM_VERSION_DECLARED", "POM pins a dependency or plugin version that belongs in the parent."))
+    if child.get("forbid_profiles") and any(local(element) == "profiles" for element in root.iter()):
+        failures.append(("POM_PROFILE_DECLARED", "POM declares Maven profiles."))
+    if child.get("forbid_final_name") and any(local(element) == "finalName" for element in root.iter()):
+        failures.append(("POM_FINAL_NAME_OVERRIDDEN", "POM overrides finalName."))
+    if child.get("require_semver") and _SEMVER.fullmatch(_text(root, ns, "version") or "") is None:
+        failures.append(("POM_VERSION_NOT_SEMVER", "POM version is not MAJOR.MINOR.PATCH."))
+    if child.get("artifact_is_repository_name") and _text(root, ns, "artifactId") != bundle.get("repo_name"):
+        failures.append(("POM_ARTIFACT_MISMATCH", "POM artifactId is not the approved repository name."))
+    if maven.get("group_id") is not None and _text(root, ns, "groupId") != maven["group_id"]:
+        failures.append(("POM_GROUP_MISMATCH", "POM groupId is not the approved organisation or business-group id."))
+    connectors = maven.get("allowed_connectors")
+    if isinstance(connectors, list):
+        used = {f"{_text(element, ns, 'groupId')}:{_text(element, ns, 'artifactId')}" for element in root.iter()
+                if local(element) == "dependency" and _text(element, ns, "classifier") == "mule-plugin"}
+        if used - set(connectors):
+            failures.append(("POM_CONNECTOR_NOT_ALLOWED", "POM declares a connector that is not approved."))
     return failures
 
 

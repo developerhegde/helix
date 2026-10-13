@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable
 
 from ..naming import LAYOUT_DEPLOYMENT_PROPERTIES
-from . import contracts, design_binding, evidence, naming_policy, pom_policy, project_policy, property_policy, reference_scan
+from . import contracts, design_binding, evidence, mule_policy, naming_policy, pom_policy, project_policy, property_policy, reference_scan
 
 # A required check that could not run; alone, these make the verdict incomplete rather than fail.
 _UNAVAILABLE = frozenset({"MAVEN_EVIDENCE_MISSING", "MAVEN_EVIDENCE_INVALID"})
@@ -79,8 +79,9 @@ def validate(project_dir: str, bundle: dict[str, Any], policy: dict[str, Any],
         raw_findings.extend(naming_findings)
     base_marks = contract is not None and contract.layout == LAYOUT_DEPLOYMENT_PROPERTIES
     raw_findings.extend(design_binding.check(project_dir, bundle))
-    raw_findings.extend(pom_policy.check(project_dir, policy))
-    raw_findings.extend(project_policy.check(project_dir, policy))
+    raw_findings.extend(pom_policy.check(project_dir, policy, bundle))
+    raw_findings.extend(project_policy.check(project_dir, policy, bundle))
+    raw_findings.extend(mule_policy.check(project_dir, bundle, policy))
     raw_findings.extend(property_policy.check(project_dir, bundle, policy, scan, base_marks_allowed=base_marks))
     maven_evidence, evidence_findings = evidence.check(project_dir, policy)
     raw_findings.extend(evidence_findings)

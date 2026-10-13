@@ -97,9 +97,26 @@ testing:
 | `configuration` | The base property source, the deployment-supplied selector and secure-key names, and the mark prefix. |
 | `testing` | The minimum application coverage. The default is 75, the value in `docs/mulesoft-development-standards.md`; a client may raise it in its standards bundle. |
 
-The control plane compiles the policy from the approved standards bundle (`project`, `testing`) and the profile's naming block (`configuration`), so the three cannot disagree. Nothing in it comes from a ticket or a model.
+The policy is compiled, never written by hand: `helix stage --profile <dir> --out-dir <dir>` refuses an unhealthy profile, then writes `validation-policy.json`, `naming-contract.json` and a byte copy of the standards bundle into a new directory, the three inputs of LLD 07 §3.4.4. `helix.validation.policy_compiler.compile_policy` takes `maven`, `project`, `testing` and the standards checks from the approved bundle and `configuration` from the naming contract, so the three cannot disagree. Nothing in it comes from a ticket or a model. The coverage minimum is 75 when the bundle is silent, and the mark prefix is the product's identifier unless the bundle sets one.
 
 **Marks.** A value owed after merge is written as `${HELIX_SET_<ENV>}`, and an owed secret as `${HELIX_ENCRYPT_<ENV>}`, where `<ENV>` is the naming contract's environment key. The prefix is policy data, so a product rename or a client convention changes one field and no validator code.
+
+### Standards checks
+
+These sections are optional. Each field switches on one check taken from the client standards; a policy without the field skips it. Patterns are regular expressions that must match the whole name.
+
+| Field | Check | Finding |
+| --- | --- | --- |
+| *(always)* | No version range, `LATEST` or `RELEASE` in the POM | `POM_VERSION_RANGE` |
+| `maven.child_pom.forbid_versions`, `forbid_profiles`, `forbid_final_name`, `require_semver`, `artifact_is_repository_name` | The child POM pins no version, declares no profile, keeps `finalName`, uses MAJOR.MINOR.PATCH, and is named for the repository | `POM_VERSION_DECLARED`, `POM_PROFILE_DECLARED`, `POM_FINAL_NAME_OVERRIDDEN`, `POM_VERSION_NOT_SEMVER`, `POM_ARTIFACT_MISMATCH` |
+| `maven.group_id`, `maven.allowed_connectors` | The organisation's `groupId`; connectors only from the approved coordinates | `POM_GROUP_MISMATCH`, `POM_CONNECTOR_NOT_ALLOWED` |
+| `project.mule_artifact {min_mule_version, java, secure_key}` | `mule-artifact.json` states the runtime and Java version and lists every secret key and the secure key | `MULE_ARTIFACT_INVALID` |
+| `patterns.{implementation_flow, sub_flow, connector_config, flow_variable, error_type, object_store, property_key, feature_flag, dataweave_script, dataweave_module}` | Names and paths follow the standard | `NAME_PATTERN_VIOLATION` |
+| `mule.error_handler_file`, `forbid_on_error_continue_any`, `require_request_validation` | One global error handler in the named file; no continue on every error; one APIkit router with validation on | `ERROR_HANDLER_MISPLACED`, `ON_ERROR_CONTINUE_ANY`, `APIKIT_ROUTER_NOT_SINGLE`, `APIKIT_VALIDATION_DISABLED` |
+| `logging.forbid_free_text_logger`, `log_event_subflow` | No `<logger>` outside the approved sub-flow | `FREE_TEXT_LOGGER` |
+| `testing.forbid_sleep`, `ignored_needs_ticket`, `suite_per_implementation` | No sleep; an ignored test names a ticket; each implementation file has a suite | `TEST_SLEEP`, `TEST_IGNORED_WITHOUT_TICKET`, `TEST_SUITE_MISSING` |
+
+A Mule XML file that is not well-formed is `MULE_XML_INVALID` when any of these checks is on. Findings carry fixed text and never a name, so a report cannot leak a value through a name.
 
 `marker_prefix` and `environment_selector` are enforced when the naming contract is staged. Not yet enforced: `munit_version` and `secure_property_key`.
 
