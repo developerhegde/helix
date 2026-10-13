@@ -95,12 +95,14 @@ The schema remains deliberately narrow in its first iteration. Unknown prose mus
 
 ## Additions accepted on 2026-10-12
 
-`standards-bundle-mapping.md` classifies all 94 rules of `docs/mulesoft-development-standards.md`. To carry them, the bundle needs the fields below. They are additive, so the format stays `client_standards_bundle.v1`. The loader does not read them yet.
+`standards-bundle-mapping.md` classifies all 94 rules of `docs/mulesoft-development-standards.md`. To carry them, the bundle needs the fields below. They are additive, so the format stays `client_standards_bundle.v1`. `helix stage` compiles the fields the validator can check into the attempt's `validation_policy.v1`; a field the bundle omits leaves its check off. Not yet compiled: `project.mule_files` other than the error-handler file, `api.contract_source`, `api.base_path`, `error_handling.mappings`, the resource and flow coverage minimums, `review` and `rules[]`.
 
 ```yaml
 project:
   mule_files: {global: global.xml, error_handler: error-handler.xml, router: "{name}-api.xml", implementation: "{resource}-impl.xml"}
-  child_pom: {forbid_versions: true, forbid_profiles: true, forbid_final_name: true, forbid_version_ranges: true}
+  child_pom: {forbid_versions: true, forbid_profiles: true, forbid_final_name: true, require_semver: true, artifact_is_repository_name: true}
+  group_id: <Anypoint organisation or business-group id>
+  require_mule_artifact: true
 api:
   contract_source: repository            # or exchange_dependency (mapping decision D2)
   base_path: /api/v{major}
@@ -113,12 +115,13 @@ patterns:                                # anchored regular expressions, checked
   error_type: "APP:[A-Z][A-Z0-9_]*"
   object_store: "[a-z0-9]+(-[a-z0-9]+)*-os"
 connectors:
-  allowed: [http, db, salesforce, sftp, file, anypoint-mq, jms, vm, objectstore, email, wsc, validation, secure-properties]
+  allowed: [org.mule.connectors:mule-http-connector, org.mule.connectors:mule-db-connector]   # Maven groupId:artifactId
 configuration:
   layout: deployment_properties          # or environment_files (mapping decision D1)
   same_keys_every_environment: true
 error_handling:
   handler_file: error-handler.xml
+  forbid_continue_on_any: true
   mappings:
     - {types: ["APIKIT:BAD_REQUEST", "APP:VALIDATION"], status: 400, code: VALIDATION_FAILED}
     - {types: ["APIKIT:NOT_FOUND", "APP:*_NOT_FOUND"], status: 404, code: NOT_FOUND}
@@ -127,6 +130,12 @@ testing:
   minimum_application_coverage: 75
   minimum_resource_coverage: 50
   minimum_flow_coverage: 50
+  forbid_sleep: true
+  ignored_needs_ticket: "[A-Z][A-Z0-9]+-[0-9]+"
+  suite_per_implementation: "-impl.xml"
+logging:
+  forbid_free_text_logger: true
+  log_event_subflow: log-event-subflow
 review:
   branch_pattern: "feature/{ticket_key}-{slug}"
   commit_pattern: "{ticket_key}: {summary}"

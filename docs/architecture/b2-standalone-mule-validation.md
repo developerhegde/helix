@@ -97,7 +97,7 @@ testing:
 | `configuration` | The base property source, the deployment-supplied selector and secure-key names, and the mark prefix. |
 | `testing` | The minimum application coverage. The default is 75, the value in `docs/mulesoft-development-standards.md`; a client may raise it in its standards bundle. |
 
-The control plane compiles the policy from the approved standards bundle (`project`, `testing`) and the profile's naming block (`configuration`), so the three cannot disagree. Nothing in it comes from a ticket or a model.
+The policy is compiled, never written by hand: `helix stage --profile <dir> --out-dir <dir>` refuses an unhealthy profile, then writes `validation-policy.json`, `naming-contract.json` and a byte copy of the standards bundle into a new directory, the three inputs of LLD 07 §3.4.4. `helix.validation.policy_compiler.compile_policy` takes `maven`, `project`, `testing` and the standards checks from the approved bundle and `configuration` from the naming contract, so the three cannot disagree. Nothing in it comes from a ticket or a model. The coverage minimum is 75 when the bundle is silent, and the mark prefix is the product's identifier unless the bundle sets one.
 
 **Marks.** A value owed after merge is written as `${HELIX_SET_<ENV>}`, and an owed secret as `${HELIX_ENCRYPT_<ENV>}`, where `<ENV>` is the naming contract's environment key. The prefix is policy data, so a product rename or a client convention changes one field and no validator code.
 

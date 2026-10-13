@@ -99,6 +99,7 @@ Every phase is a CLI; the GitHub Action, the Temporal activity and a terminal ru
 | `helix test` | agent worker | Test agent session, coverage, mutation check | 07 |
 | `helix verify --stage {build,test,head}` | agent worker, no agent session | Independent Maven, naming, property, secret and generated-tree validation | 07 |
 | `helix validate` | agent worker or control plane, no agent session | Run the standalone B2 project validator against an approved design bundle | B2 validation decision |
+| `helix stage` | control plane | Refuse an unhealthy profile, then write an attempt's `validation-policy.json`, `naming-contract.json` and standards bundle copy | B2 validation decision |
 | `helix pr` | control plane | Git writer: branch, commit, pull request, ticket link | 07 |
 | `helix run` | terminal or Action | Runs a ticket's phases in order without Temporal (B2 pilot, parity) | 01 |
 | `helix webhook serve` | control plane | Webhook receiver | 03 |

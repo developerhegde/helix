@@ -9,6 +9,8 @@
 - Doctor rules B1-017 (`client_id` equals the profile directory name) and B1-018 (unknown top-level key, a warning); findings sorted by rule id.
 - Doctor: `vault://` references must sit inside `vault.scope` (B1-009); the profile must agree with the standards bundle (B1-019); platform names follow `anypoint.environments` (B1-020); bundle-listed files are digest-checked (B1-016).
 - Validator standards checks, each switched on by a policy field: child POM rules, `mule-artifact.json`, name patterns, error-handler placement, APIkit validation, free-text loggers and MUnit suite rules.
+- `helix stage`: compile `validation_policy.v1` from the standards bundle and write an attempt's three validation inputs.
+- CI workflow per LLD 01 §3.10 (on demand and on the `test` branch, Ubuntu only), with a guard; `.gitattributes` pins LF line endings so digest-pinned files match on Windows.
 - Design: profile schema reconciliation, deciding thirteen differences between the B1 contract and LLD 02.
 - Design: B2 contracts for validation, naming, Maven/MUnit execution, the standards bundle and the design bundle; LLD 07 revised to the standalone design; marks renamed to `HELIX_SET_` and `HELIX_ENCRYPT_`; default coverage minimum 75.
 

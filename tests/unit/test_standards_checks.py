@@ -110,7 +110,7 @@ class StandardsChecksTest(unittest.TestCase):
             for relative, text in files.items():
                 path = os.path.join(project, *relative.split("/"))
                 os.makedirs(os.path.dirname(path), exist_ok=True)
-                with open(path, "w", encoding="utf-8") as handle:
+                with open(path, "w", encoding="utf-8", newline="\n") as handle:
                     handle.write(text)
                 digests[relative] = hashlib.sha256(text.encode("utf-8")).hexdigest()
             member = lambda path: {"path": path, "sha256": digests[path]}

@@ -36,7 +36,7 @@ def load(profile_dir: str, client_id: str, reference: Any) -> StandardsBundle:
         raise StandardsInvalid("standards version is missing")
     if not isinstance(expected_digest, str) or len(expected_digest) != 64 or any(c not in "0123456789abcdef" for c in expected_digest):
         raise StandardsInvalid("standards digest is invalid")
-    bundle_path = _join(profile_dir, path)
+    bundle_path = _join(profile_dir, path)  # the same resolution as the public bundle_path()
     try:
         with open(bundle_path, "rb") as handle:
             raw = handle.read()
@@ -52,6 +52,13 @@ def load(profile_dir: str, client_id: str, reference: Any) -> StandardsBundle:
     _validate_bundle(value, client_id, version)
     _validate_files(os.path.dirname(bundle_path), value.get("files"))
     return StandardsBundle(client_id, version, digest, MappingProxyType(value))
+
+
+def bundle_path(profile_dir: str, reference: Any) -> str:
+    """The bundle file a validated profile reference names, confined to the profile directory."""
+    if not isinstance(reference, dict) or not isinstance(reference.get("path"), str) or not _safe_relative(reference["path"]):
+        raise StandardsInvalid("standards path is not a safe relative path")
+    return _join(profile_dir, reference["path"])
 
 
 def _validate_bundle(value: Any, client_id: str, version: str) -> None:

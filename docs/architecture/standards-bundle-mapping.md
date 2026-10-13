@@ -39,7 +39,7 @@ This document turns every rule of the standards document into one entry, as `cli
 
 Of the 94 rules (87 Blocking, 7 Advisory), 71 are for Helix to check automatically, 16 stay with a reviewer, 6 belong to the client's pipeline or platform, and 1 is an accepted deviation in B2. 39 of the 71 are fully or partly built today.
 
-*Built* means the validator enforces the rule when the staged `validation_policy.v1` carries its setting. Each standards check is switched on by a policy field; the policy is still written by hand, and compiling it from the approved bundle is not built.
+*Built* means the validator enforces the rule when the staged `validation_policy.v1` carries its setting. Each standards check is switched on by a policy field, and `helix stage` compiles the policy from the approved bundle, so a rule is enforced for a client once its bundle carries the field.
 
 ## Naming
 
@@ -184,5 +184,5 @@ Of the 94 rules (87 Blocking, 7 Advisory), 71 are for Helix to check automatical
 
 1. Carry the branch pattern (D4) through LLD 01, 02, 03, 06 and 07, which still assume the old branch name.
 2. Add the approved rules to the bundle as its `rules[]` registry, each with this document's identifier.
-3. Build the step that compiles `validation_policy.v1` from the approved bundle, then design the remaining 18 *To design* rules.
+3. Design the remaining 18 *To design* rules.
 4. Regenerate the `acme-a` fixture bundle and its digest.
