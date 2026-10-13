@@ -80,5 +80,18 @@ def _sources():
                   for name in files if name.endswith(".py"))
 
 
+class CiPolicyGuard(unittest.TestCase):
+    """LLD 01 §3.10: CI runs on demand and on the release-gate branch, on one Linux runner, and nowhere else."""
+
+    def test_ci_triggers_and_runner(self):
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        with open(os.path.join(root, ".github", "workflows", "ci.yml"), encoding="utf-8") as handle:
+            workflow = yaml.safe_load(handle)
+        triggers = workflow.get("on", workflow.get(True))  # YAML reads a bare `on` as true
+        self.assertEqual(set(triggers), {"workflow_dispatch", "push"})
+        self.assertEqual(triggers["push"], {"branches": ["test"]})
+        self.assertEqual({job["runs-on"] for job in workflow["jobs"].values()}, {"ubuntu-24.04"})
+
+
 if __name__ == "__main__":
     unittest.main()
