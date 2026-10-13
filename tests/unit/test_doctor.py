@@ -177,7 +177,7 @@ class DoctorTest(unittest.TestCase):
         root = self.profile()
         standards = os.path.join(root, "standards")
         for name, text in files:
-            with open(os.path.join(standards, name), "w", encoding="utf-8") as handle:
+            with open(os.path.join(standards, name), "w", encoding="utf-8", newline="\n") as handle:
                 handle.write(text)
         with open(os.path.join(standards, "bundle.yaml"), encoding="utf-8") as handle:
             bundle = yaml.safe_load(handle)
