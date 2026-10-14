@@ -1,0 +1,5 @@
+{
+  "minMuleVersion": "4.9.1",
+  "javaSpecificationVersions": ["17"],
+  "secureProperties": ["secure::erp.password", "secure.key"]
+}

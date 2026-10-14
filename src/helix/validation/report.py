@@ -18,9 +18,10 @@ _UNAVAILABLE = frozenset({"MAVEN_EVIDENCE_MISSING", "MAVEN_EVIDENCE_INVALID"})
 class Finding:
     code: str
     message: str
+    subject: str = ""  # the file, key, element or coordinate at fault; never a property value
 
     def as_dict(self) -> dict[str, str]:
-        return {"code": self.code, "message": self.message}
+        return {"code": self.code, "message": self.message, "subject": self.subject}
 
 
 @dataclass(frozen=True)
@@ -61,13 +62,13 @@ def validate(project_dir: str, bundle: dict[str, Any], policy: dict[str, Any],
     """Validate a generated project. ``naming`` is the staged ``naming_contract.v1``;
     when given, NAM-001 to NAM-007 run and the report records the proven digest."""
     scan = reference_scan.scan(project_dir)
-    raw_findings: list[tuple[str, str]] = []
+    raw_findings: list[tuple[str, ...]] = []
     bundle_contract_findings = contracts.check_bundle(bundle)
     policy_contract_findings = contracts.check_policy(policy)
     raw_findings.extend(bundle_contract_findings)
     raw_findings.extend(policy_contract_findings)
     if bundle_contract_findings or policy_contract_findings:
-        findings = tuple(Finding(code, message) for code, message in sorted(set(raw_findings)))
+        findings = _findings(raw_findings)
         return Report(_policy_version(policy), _digest(policy), _digest(bundle), "fail", findings, None, (), (), (), ())
     standards_digest = bundle.get("standards_bundle_digest")
     expected_standards_digest = policy.get("standards_bundle_digest")
@@ -90,7 +91,7 @@ def validate(project_dir: str, bundle: dict[str, Any], policy: dict[str, Any],
     expected_mappings = {item.get("id") for item in bundle.get("mappings", ()) if isinstance(item, dict)}
     if expected_mappings - set(scan.mappings):
         raw_findings.append(("MAPPING_ANCHOR_MISSING", "Approved mapping anchors are missing from DataWeave source."))
-    findings = tuple(Finding(code, message) for code, message in sorted(set(raw_findings)))
+    findings = _findings(raw_findings)
     return Report(
         _policy_version(policy),
         _digest(policy),
@@ -106,6 +107,11 @@ def validate(project_dir: str, bundle: dict[str, Any], policy: dict[str, Any],
         tuple(sorted(scan.mappings)),
         contract.digest if contract is not None else None,
     )
+
+
+def _findings(raw: Iterable[tuple[str, ...]]) -> tuple[Finding, ...]:
+    """Sorted, without repeats; a check that names no subject leaves it empty."""
+    return tuple(Finding(*item) for item in sorted({(*item, "")[:3] for item in raw}))
 
 
 def _verdict(findings: Iterable[Finding]) -> str:

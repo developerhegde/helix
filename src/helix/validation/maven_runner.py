@@ -53,5 +53,5 @@ def run(project_dir: str, settings_path: str, output_path: str, *,
 
 
 def _environment() -> dict[str, str]:
-    names = ("HOME", "LANG", "PATH", "TMPDIR")
+    names = ("HOME", "JAVA_HOME", "LANG", "PATH", "TMPDIR")  # JAVA_HOME selects the JDK 17 Mule needs
     return {name: os.environ[name] for name in names if name in os.environ}

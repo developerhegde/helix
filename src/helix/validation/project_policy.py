@@ -12,11 +12,12 @@ def check(project_dir: str, policy: dict[str, Any], bundle: Optional[Mapping[str
     forbidden = tuple(policy.get("project", {}).get("forbidden_paths", ()))
     expected = policy.get("project", {}).get("mule_artifact")
     failures = _mule_artifact(project_dir, expected, bundle or {}) if isinstance(expected, dict) else []
+    failures.extend(_gitignore(project_dir, policy.get("project", {}).get("gitignore_required")))
     for folder, _, files in os.walk(project_dir):
         for name in files:
             relative = os.path.relpath(os.path.join(folder, name), project_dir).replace("\\", "/")
             if any(_matches(relative, pattern) for pattern in forbidden):
-                failures.append(("FORBIDDEN_PROJECT_PATH", "Generated project contains a forbidden path."))
+                failures.append(("FORBIDDEN_PROJECT_PATH", "Generated project contains a forbidden path.", relative))
                 return failures
     if policy.get("project", {}).get("forbid_java_interop"):
         java_root = os.path.join(project_dir, "src", "main", "java")
@@ -42,7 +43,20 @@ def _mule_artifact(project_dir: str, expected: Mapping[str, Any], bundle: Mappin
              and ("java" not in expected or artifact.get("javaSpecificationVersions") == [str(expected["java"])])
              and all(key in hidden or f"secure::{key}" in hidden for key in secrets)
              and ("secure_key" not in expected or expected["secure_key"] in hidden))
-    return [] if valid else [("MULE_ARTIFACT_INVALID", "mule-artifact.json is missing or departs from the approved runtime, Java version or secure properties.")]
+    return [] if valid else [("MULE_ARTIFACT_INVALID", "mule-artifact.json is missing or departs from the approved runtime, Java version or secure properties.", "mule-artifact.json")]
+
+
+def _gitignore(project_dir: str, required: Any) -> list[tuple[str, ...]]:
+    """STD-SEC-09: the project's .gitignore keeps local credentials and overrides out of Git."""
+    if not isinstance(required, list):
+        return []
+    try:
+        with open(os.path.join(project_dir, ".gitignore"), encoding="utf-8") as handle:
+            present = {line.strip() for line in handle}
+    except OSError:
+        present = set()
+    return [("GITIGNORE_INCOMPLETE", ".gitignore does not exclude a required entry.", entry)
+            for entry in required if isinstance(entry, str) and entry not in present]
 
 
 def _matches(path: str, pattern: str) -> bool:

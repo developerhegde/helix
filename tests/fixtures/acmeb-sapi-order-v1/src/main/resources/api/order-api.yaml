@@ -1,0 +1,52 @@
+openapi: 3.0.0
+info:
+  title: Order System API
+  version: 1.0.0
+  description: Reads orders from the ERP system.
+paths:
+  /orders/{orderId}:
+    get:
+      operationId: getOrderById
+      description: Returns one order.
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The order.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+              example:
+                orderId: "12345"
+                status: OPEN
+                total:
+                  amount: 10.5
+                  currency: EUR
+                createdAt: "2026-10-09T15:10:00Z"
+        "404":
+          description: No order has that identifier.
+components:
+  schemas:
+    Order:
+      type: object
+      required: [orderId, status]
+      properties:
+        orderId:
+          type: string
+        status:
+          type: string
+        total:
+          type: object
+          properties:
+            amount:
+              type: number
+            currency:
+              type: string
+        createdAt:
+          type: string
+          format: date-time

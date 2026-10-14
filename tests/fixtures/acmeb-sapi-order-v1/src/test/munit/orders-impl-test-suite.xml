@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+        http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+
+  <munit:config name="orders-impl-test-suite.xml"/>
+
+  <munit:test name="get-order-by-id-flow-returns-order-when-erp-has-it-test"
+              description="Returns the mapped order when the ERP returns one">
+    <munit:behavior>
+      <munit-tools:mock-when processor="http:request" doc:name="Mock ERP get order">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="doc:name" whereValue="Call ERP get order"/>
+        </munit-tools:with-attributes>
+        <munit-tools:then-return>
+          <munit-tools:payload mediaType="application/json"
+                               value='#[{id: 12345, state: "OPEN", totalAmount: 10.5, currencyCode: "EUR", createdOn: "2026-10-09T15:10:00Z"}]'/>
+        </munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <flow-ref name="get-order-by-id-flow" doc:name="Run the flow"/>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-equals actual="#[payload.orderId]" expected='#["12345"]' doc:name="Order id is mapped"/>
+      <munit-tools:assert-equals actual="#[payload.total.currency]" expected='#["EUR"]' doc:name="Currency is mapped"/>
+    </munit:validation>
+  </munit:test>
+</mule>
