@@ -13,6 +13,7 @@
 - `.gitattributes` pins LF line endings so digest-pinned files match on Windows. No CI workflow is checked in: tests run on the development machines (owner decision, 2026-10-13).
 - Fixture client `acme-b` (own grammar, `deployment_properties` layout, full standards bundle) and the sample application `acmeb-sapi-order-v1` that follows the reference standard; an end-to-end test stages the profile and validates the application.
 - Naming: an allow-list is owed only for a name part the client's forms use. POM: the runtime is not required in a child POM whose parent pins every version.
+- First live Maven run: the sample application packages with public repositories only; MUnit needs the enterprise runtime. Fixture parent POM `acme-b-mule-parent`; the Maven runner passes `JAVA_HOME`; Maven 3.10 is incompatible with the Mule Maven plugin, so 3.9 is required.
 - Design: profile schema reconciliation, deciding thirteen differences between the B1 contract and LLD 02.
 - Design: B2 contracts for validation, naming, Maven/MUnit execution, the standards bundle and the design bundle; LLD 07 revised to the standalone design; marks renamed to `HELIX_SET_` and `HELIX_ENCRYPT_`; default coverage minimum 75.
 

@@ -2,7 +2,7 @@
 
 ## Decision
 
-Helix runs Maven and MUnit only through a dedicated verifier process. The verifier receives an explicit project directory and an explicit Maven settings file, constructs a minimal environment, and writes a value-free execution receipt. It never receives a client credential, a profile directory, shell input, or inherited environment variables beyond `HOME`, `LANG`, `PATH`, and `TMPDIR`.
+Helix runs Maven and MUnit only through a dedicated verifier process. The verifier receives an explicit project directory and an explicit Maven settings file, constructs a minimal environment, and writes a value-free execution receipt. It never receives a client credential, a profile directory, shell input, or inherited environment variables beyond `HOME`, `JAVA_HOME`, `LANG`, `PATH`, and `TMPDIR`. `JAVA_HOME` selects the JDK 17 that Mule 4.9 needs.
 
 The first executable interface is:
 
@@ -89,20 +89,38 @@ Before enabling a real Maven/MUnit run, confirm against the approved parent POM:
 - Maven wrapper/container repository location and proxy-only settings layout;
 - test-selection and coverage properties supplied by the parent POM.
 
+## Live run results (2026-10-14, macOS, no enterprise repository access)
+
+The sample application `tests/fixtures/acmeb-sapi-order-v1/` and its client parent POM `tests/fixtures/acme-b-mule-parent/` were built with real Maven against MuleSoft's public repository only.
+
+| Step | Result | What it settles |
+| --- | --- | --- |
+| Install the parent POM | Success | The parent pins every version; the child pins none |
+| `mvn package -DskipMunitTests` | **Success**: a 68 MB `mule-application` archive | Every build piece the sample uses is public: Mule Maven plugin 4.10.2, MUnit 3.7.4, HTTP connector 1.12.2, APIkit 1.13.0, secure properties module 1.3.1. Packaging needs no enterprise access |
+| `mvn test` (MUnit) | Fails: `mule-runtime-impl-no-services-bom:4.9.1` not found | MUnit's enterprise runtime is the one piece that needs MuleSoft's enterprise repository |
+
+Toolchain facts found on the way:
+
+- **Maven 3.9, not 3.10.** Mule Maven plugin 4.10.2 fails on Maven 3.10.0 with `NoSuchMethodError` in the resolver (`DefaultMirrorSelector.add`). Maven 3.9.16 works, matching conventions §2. Homebrew installs 3.10; take 3.9 from Apache's archive.
+- **JDK 17 through `JAVA_HOME`.** Maven otherwise runs on the newest installed JDK. The runner passes `JAVA_HOME` through.
+- **The plugin reads MuleSoft's runtime support matrix from GitHub** (`raw.githubusercontent.com`) when packaging, and plugin 4.10.2 has no usable bundled copy. A machine that cannot reach GitHub cannot package. On the build machine the JVM timed out over IPv6 and needed `-Djava.net.preferIPv4Stack=true` in `MAVEN_OPTS`; that is a machine setting, not a project one.
+
+Still open: the MUnit report and coverage file locations (the external facts above) need one passing MUnit run, which needs enterprise access.
+
 ## Live run: what it needs
 
-The sample application `tests/fixtures/acmeb-sapi-order-v1/` passes every static check Helix has, with synthetic evidence. It has never been built by Maven. A live run needs, on the machine that runs it:
+The next live run, with MUnit, needs on the machine that runs it:
 
 1. JDK 17 and Maven 3.9.
 2. A Maven `settings.xml` holding the owner's access to MuleSoft's enterprise repository. Helix never reads or writes that credential; `helix verify` only passes the file's path to Maven.
-3. The client's parent POM (`acme-b-org-id:acme-b-mule-parent:1.0.0` for the fixture) installed in the local repository. No parent POM is checked in yet; it is to be written against a real build, because its plugin versions and report settings are the external facts listed above.
+3. The client's parent POM installed in the local repository (`tests/fixtures/acme-b-mule-parent/` for the fixture).
 
 Then:
 
 ```text
 helix stage  --profile <acme-b profile> --out-dir <staged>
 helix verify --project <application> --bundle <design bundle> --policy <staged>/validation-policy.json \
-             --naming-contract <staged>/naming-contract.json --settings <settings.xml>
+             --naming-contract <staged>/naming-contract.json --settings <settings.xml> --maven <maven 3.9>/bin/mvn
 ```
 
 ## Acceptance criteria
