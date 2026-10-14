@@ -83,7 +83,7 @@ naming:
 standards:
   path: standards/bundle.yaml
   version: 1.0.0
-  sha256: fce96a5b96941448d1bfaf52739558fd9ecce9ae4400731b3ba3215a5911e047
+  sha256: d1d7e9b84bd48f54350fc5d4e346d5383f730026fbf588f753933717db658fab
 gates:
   requirement:
     - acme-b-architect@example.invalid

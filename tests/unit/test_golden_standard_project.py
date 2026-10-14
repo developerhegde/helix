@@ -23,7 +23,9 @@ KEYS = [
     {"key": "erp.http.base-path", "class": "invariant"},
     {"key": "erp.http.timeout-ms", "class": "invariant"},
     {"key": "erp.password", "class": "secret", "environments": BOTH},
+    {"key": "http.host", "class": "invariant"},
     {"key": "http.port", "class": "deployment"},
+    {"key": "api.id", "class": "deployment"},
     {"key": "secure.key", "class": "deployment"},
 ]
 IMPL = "src/main/mule/orders-impl.xml"
@@ -39,6 +41,15 @@ DEPARTURES = [  # (expected code, file, text to find, replacement); a file that 
     ("MAPPING_ANCHOR_MISSING", "src/main/resources/dwl/orders/map-erp-order-to-order.dwl", "// map:MAP-001", "// mapping"),
     ("DESIGN_ARTEFACT_CHANGED", "docs/design/lld.md", "MAP-001", "MAP-002"),
     ("TEST_SUITE_MISSING", "src/test/munit/orders-impl-test-suite.xml", None, None),
+    ("NAME_PATTERN_VIOLATION", "src/main/mule/order-api.xml", 'path="/api/v1/*"', 'path="/orders/*"'),
+    ("GITIGNORE_INCOMPLETE", ".gitignore", "settings.xml\n", ""),
+    ("LOG_LEVEL_FORBIDDEN", "src/main/resources/log4j2.xml", '<AsyncRoot level="INFO">', '<AsyncRoot level="TRACE">'),
+    ("AUTODISCOVERY_MISSING", "src/main/mule/global.xml", 'apiId="${api.id}"', 'apiId="12345"'),
+    ("CONNECTOR_LITERAL_VALUE", "src/main/mule/global.xml", 'host="${erp.http.host}"', 'host="erp.example.invalid"'),
+    ("HTTP_TIMEOUT_MISSING", "src/main/mule/global.xml", ' responseTimeout="${erp.http.timeout-ms}"', ""),
+    ("ERROR_MAPPING_MISMATCH", "src/main/mule/error-handler.xml", 'value="504"', 'value="500"'),
+    ("ERROR_MAPPING_MISSING", "src/main/mule/error-handler.xml", 'type="HTTP:TIMEOUT"', 'type="HTTP:RETRY_EXHAUSTED"'),
+    ("ERROR_ENVELOPE_MISSING", "src/main/mule/error-handler.xml", '<set-variable variableName="httpStatus" value="405" doc:name="Set status 405"/>', ""),
 ]
 
 
@@ -73,7 +84,7 @@ class GoldenStandardProjectTest(unittest.TestCase):
                               "deployed_names": {"DEV": NAME + "-dev", "SIT": NAME + "-sit"}}],
             "contract": member("src/main/resources/api/order-api.yaml"),
             "documents": {"hld": member("docs/design/hld.md"), "lld": member("docs/design/lld.md")},
-            "keys": KEYS, "deployment_property_keys": ["http.port", "secure.key"], "mappings": [{"id": "MAP-001"}],
+            "keys": KEYS, "deployment_property_keys": ["api.id", "http.port", "secure.key"], "mappings": [{"id": "MAP-001"}],
         }
         os.makedirs(path("target"))
         with open(path(f"target/{pid.CANONICAL_ID}-validation-evidence.json"), "w", encoding="utf-8") as handle:

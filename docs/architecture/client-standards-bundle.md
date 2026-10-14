@@ -95,7 +95,7 @@ The schema remains deliberately narrow in its first iteration. Unknown prose mus
 
 ## Additions accepted on 2026-10-12
 
-`standards-bundle-mapping.md` classifies all 94 rules of `docs/mulesoft-development-standards.md`. To carry them, the bundle needs the fields below. They are additive, so the format stays `client_standards_bundle.v1`. `helix stage` compiles the fields the validator can check into the attempt's `validation_policy.v1`; a field the bundle omits leaves its check off. Not yet compiled: `project.mule_files` other than the error-handler file, `api.contract_source`, `api.base_path`, `error_handling.mappings`, the resource and flow coverage minimums, `review` and `rules[]`.
+`standards-bundle-mapping.md` classifies all 94 rules of `docs/mulesoft-development-standards.md`. To carry them, the bundle needs the fields below. They are additive, so the format stays `client_standards_bundle.v1`. `helix stage` compiles the fields the validator can check into the attempt's `validation_policy.v1`; a field the bundle omits leaves its check off. Not yet compiled: `project.mule_files` other than the error-handler file, `api.contract_source`, `api.base_path` (checked through `patterns.listener_path` instead), the resource and flow coverage minimums, `review` and `rules[]`. Also compiled: `project.gitignore_required`, `api.autodiscovery`, `connectors.values_from_properties`, `connectors.require_http_timeouts`, `error_handling.envelope_script`, `error_handling.mappings`, `logging.forbid_trace` and `logging.root_levels`.
 
 ```yaml
 project:

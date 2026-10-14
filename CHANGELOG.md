@@ -16,6 +16,7 @@
 - First live Maven run: the sample application packages with public repositories only; MUnit needs the enterprise runtime. Fixture parent POM `acme-b-mule-parent`; the Maven runner passes `JAVA_HOME`; Maven 3.10 is incompatible with the Mule Maven plugin, so 3.9 is required.
 - Validator findings carry a `subject` naming the file, key, element or coordinate at fault (never a value), one finding per subject.
 - Owner decisions 2026-10-14: placeholders stay in the base file; findings name the offender; the audit seal record is accepted; a client without a deployment pipeline is out of scope; the client's pipeline publishes contracts to Exchange.
+- Standards checks: listener paths and Mule file names, `.gitignore` entries, autodiscovery and console state, connection values from properties, HTTP timeouts, the global error handler's envelope and the error-mapping table, log4j2 levels. The sample application meets all of them.
 - Design: profile schema reconciliation, deciding thirteen differences between the B1 contract and LLD 02.
 - Design: B2 contracts for validation, naming, Maven/MUnit execution, the standards bundle and the design bundle; LLD 07 revised to the standalone design; marks renamed to `HELIX_SET_` and `HELIX_ENCRYPT_`; default coverage minimum 75.
 

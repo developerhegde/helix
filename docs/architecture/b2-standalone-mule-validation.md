@@ -114,6 +114,12 @@ These sections are optional. Each field switches on one check taken from the cli
 | `patterns.{implementation_flow, sub_flow, connector_config, flow_variable, error_type, object_store, property_key, feature_flag, dataweave_script, dataweave_module}` | Names and paths follow the standard | `NAME_PATTERN_VIOLATION` |
 | `mule.error_handler_file`, `forbid_on_error_continue_any`, `require_request_validation` | One global error handler in the named file; no continue on every error; one APIkit router with validation on | `ERROR_HANDLER_MISPLACED`, `ON_ERROR_CONTINUE_ANY`, `APIKIT_ROUTER_NOT_SINGLE`, `APIKIT_VALIDATION_DISABLED` |
 | `logging.forbid_free_text_logger`, `log_event_subflow` | No `<logger>` outside the approved sub-flow | `FREE_TEXT_LOGGER` |
+| `patterns.listener_path`, `patterns.mule_file` | HTTP listener paths and Mule file names follow the standard | `NAME_PATTERN_VIOLATION` |
+| `project.gitignore_required` | `.gitignore` excludes each listed entry | `GITIGNORE_INCOMPLETE` |
+| `mule.api_properties` | Autodiscovery exists with `apiId` from a property; a console flow's state is a property | `AUTODISCOVERY_MISSING`, `CONSOLE_STATE_HARDCODED` |
+| `mule.connector_values_from_properties`, `require_http_timeouts` | Connection hosts, ports, paths and credentials are properties; every HTTP requester has a response timeout from a property | `CONNECTOR_LITERAL_VALUE`, `HTTP_TIMEOUT_MISSING` |
+| `mule.error_envelope_script`, `error_mappings` | Each branch of the global handler sets the status and renders the shared envelope; each error type maps to the table's status, and a table row is owed when its error types can occur (`ANY` and wildcard namespaces always, a connector's types when its namespace is used, `APP` types when raised) | `ERROR_ENVELOPE_MISSING`, `ERROR_MAPPING_MISSING`, `ERROR_MAPPING_MISMATCH` |
+| `logging.log4j2 {forbid_trace, root_levels}` | No logger at TRACE; the root level is approved or a property | `LOG_LEVEL_FORBIDDEN` |
 | `testing.forbid_sleep`, `ignored_needs_ticket`, `suite_per_implementation` | No sleep; an ignored test names a ticket; each implementation file has a suite | `TEST_SLEEP`, `TEST_IGNORED_WITHOUT_TICKET`, `TEST_SUITE_MISSING` |
 
 A Mule XML file that is not well-formed is `MULE_XML_INVALID` when any of these checks is on.
