@@ -89,6 +89,22 @@ Before enabling a real Maven/MUnit run, confirm against the approved parent POM:
 - Maven wrapper/container repository location and proxy-only settings layout;
 - test-selection and coverage properties supplied by the parent POM.
 
+## Live run: what it needs
+
+The sample application `tests/fixtures/acmeb-sapi-order-v1/` passes every static check Helix has, with synthetic evidence. It has never been built by Maven. A live run needs, on the machine that runs it:
+
+1. JDK 17 and Maven 3.9.
+2. A Maven `settings.xml` holding the owner's access to MuleSoft's enterprise repository. Helix never reads or writes that credential; `helix verify` only passes the file's path to Maven.
+3. The client's parent POM (`acme-b-org-id:acme-b-mule-parent:1.0.0` for the fixture) installed in the local repository. No parent POM is checked in yet; it is to be written against a real build, because its plugin versions and report settings are the external facts listed above.
+
+Then:
+
+```text
+helix stage  --profile <acme-b profile> --out-dir <staged>
+helix verify --project <application> --bundle <design bundle> --policy <staged>/validation-policy.json \
+             --naming-contract <staged>/naming-contract.json --settings <settings.xml>
+```
+
 ## Acceptance criteria
 
 1. The runner refuses relative project, settings, or output paths and command-option injection through goals.

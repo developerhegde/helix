@@ -194,7 +194,10 @@ def compile_contract(value: Any) -> NamingContract:
         raise NamingInvalid("environment part placement is invalid")
     allowed_value = _mapping(application, "allowed")
     allowed = {}
+    used = set(repository_parts) | set(deployed_parts)
     for part in _FIXED_PARTS:
+        if part not in used:
+            continue  # an allow-list is owed only for a part the client's names carry
         entries = allowed_value.get(part)
         if not isinstance(entries, list) or not entries or not all(isinstance(item, str) and item for item in entries):
             raise NamingInvalid(f"application.allowed.{part} must be a non-empty text list")

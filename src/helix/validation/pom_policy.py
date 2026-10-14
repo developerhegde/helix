@@ -35,7 +35,9 @@ def check(project_dir: str, policy: dict[str, Any], bundle: Optional[Mapping[str
             failures.append(("POM_PLUGIN_NOT_ALLOWED", "POM declares an unapproved plugin."))
             break
     runtime = policy.get("maven", {}).get("mule_runtime")
-    if runtime and runtime not in _text_content(root):
+    child_pom = policy.get("maven", {}).get("child_pom")
+    parent_pins = isinstance(child_pom, dict) and child_pom.get("forbid_versions")
+    if runtime and not parent_pins and runtime not in _text_content(root):
         failures.append(("POM_RUNTIME_MISSING", "POM does not declare the approved Mule runtime."))
     failures.extend(_child_rules(root, ns, policy.get("maven", {}), bundle or {}))
     return failures

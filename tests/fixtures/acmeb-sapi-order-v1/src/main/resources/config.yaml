@@ -1,0 +1,5 @@
+erp.http.host: ${HELIX_SET_DEV}
+erp.http.port: "443"
+erp.http.base-path: /erp/v2
+erp.http.timeout-ms: "10000"
+erp.username: ${HELIX_SET_DEV}
