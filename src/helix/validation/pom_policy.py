@@ -69,8 +69,8 @@ def _child_rules(root: ET.Element, ns: str, maven: Mapping[str, Any], bundle: Ma
     if isinstance(connectors, list):
         used = {f"{_text(element, ns, 'groupId')}:{_text(element, ns, 'artifactId')}" for element in root.iter()
                 if local(element) == "dependency" and _text(element, ns, "classifier") == "mule-plugin"}
-        if used - set(connectors):
-            failures.append(("POM_CONNECTOR_NOT_ALLOWED", "POM declares a connector that is not approved."))
+        for coordinate in sorted(used - set(connectors)):
+            failures.append(("POM_CONNECTOR_NOT_ALLOWED", "POM declares a connector that is not approved.", coordinate))
     return failures
 
 

@@ -107,6 +107,20 @@ class GoldenStandardProjectTest(unittest.TestCase):
             with self.subTest(code=code):
                 self.assertIn(code, [item.code for item in self.report([(relative, old, new)]).findings])
 
+    def test_findings_name_the_offender_but_never_a_value(self):
+        cases = {
+            "PROPERTY_UNDEFINED": ([(IMPL, 'path="/orders/{orderId}"', 'path="${erp.http.orders-path}"')], "erp.http.orders-path"),
+            "NAME_PATTERN_VIOLATION": ([(IMPL, 'variableName="orderId"', 'variableName="order_id"')], "orders-impl.xml: order_id"),
+            "CONFIGURATION_PATH_MISMATCH": ([("src/main/resources/config-sit.yaml", None, "a.b: c\n")], "src/main/resources/config-sit.yaml"),
+            "PLAINTEXT_SECRET": ([("src/main/resources/config-secure.yaml", "${HELIX_ENCRYPT_DEV}", "acme-b-plain-value")],
+                                 "src/main/resources/config-secure.yaml: erp.password"),
+        }
+        for code, (changes, subject) in cases.items():
+            with self.subTest(code=code):
+                report = self.report(changes)
+                self.assertIn((code, subject), [(item.code, item.subject) for item in report.findings])
+                self.assertNotIn("acme-b-plain-value", json.dumps(report.as_dict()))
+
 
 if __name__ == "__main__":
     unittest.main()

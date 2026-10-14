@@ -23,7 +23,7 @@ def check(project_dir: str, bundle: dict[str, Any]) -> list[tuple[str, str]]:
             continue
         actual_path = os.path.join(project_dir, *path.split("/"))
         if not os.path.isfile(actual_path) or _sha256(actual_path) != digest:
-            failures.append(("DESIGN_ARTEFACT_CHANGED", "Approved design artefact does not match its digest."))
+            failures.append(("DESIGN_ARTEFACT_CHANGED", "Approved design artefact does not match its digest.", path))
     return list(dict.fromkeys(failures))
 
 

@@ -116,7 +116,9 @@ These sections are optional. Each field switches on one check taken from the cli
 | `logging.forbid_free_text_logger`, `log_event_subflow` | No `<logger>` outside the approved sub-flow | `FREE_TEXT_LOGGER` |
 | `testing.forbid_sleep`, `ignored_needs_ticket`, `suite_per_implementation` | No sleep; an ignored test names a ticket; each implementation file has a suite | `TEST_SLEEP`, `TEST_IGNORED_WITHOUT_TICKET`, `TEST_SUITE_MISSING` |
 
-A Mule XML file that is not well-formed is `MULE_XML_INVALID` when any of these checks is on. Findings carry fixed text and never a name, so a report cannot leak a value through a name.
+A Mule XML file that is not well-formed is `MULE_XML_INVALID` when any of these checks is on.
+
+**Findings name what is at fault** (Owner decision, 2026-10-14). Each finding is `{code, message, subject}`. The message is fixed text; the subject names the file, property key, Mule element (`file: name`) or Maven coordinate at fault, or is empty when a check has none. A subject is an identifier or a project-relative path and never a property value, so a plaintext secret is reported as `config-secure.yaml: erp.password`, never with the value. There is one finding per subject, so a report lists every offender, not only the first.
 
 `marker_prefix` and `environment_selector` are enforced when the naming contract is staged. Not yet enforced: `munit_version` and `secure_property_key`.
 

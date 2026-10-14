@@ -1,7 +1,7 @@
 """Mule source checks taken from the client standards: names, structure, logging and MUnit suites.
 
 Every check is switched on by a field of the staged ``validation_policy.v1``; a policy
-without the field skips the check. Findings carry fixed text, never a name or a value.
+without the field skips the check. A finding names the file and element at fault, never a value.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import re
 import xml.etree.ElementTree as ET
 from typing import Any, Iterable, Mapping
 
-Findings = list[tuple[str, str]]
+Findings = list[tuple[str, ...]]  # (code, message[, subject])
 
 _MAIN, _TESTS, _RESOURCES = "src/main/mule", "src/test/munit", "src/main/resources"
 _GENERATED_FLOW = re.compile(r":|-(?:main|console)$")  # APIkit's generated and scaffolded flows keep their names
@@ -42,31 +42,28 @@ def check(project_dir: str, bundle: Mapping[str, Any], policy: Mapping[str, Any]
     documents = _parse(project_dir, _MAIN, failures)
     elements = [(name, element) for name, root in documents for element in root.iter()]
 
-    def bad(pattern: str, values: Iterable[str]) -> bool:
-        return pattern in compiled and any(compiled[pattern].fullmatch(value) is None for value in values)
+    def bad(pattern: str, values: Iterable[str], message: str) -> None:
+        for value in values if pattern in compiled else ():
+            if compiled[pattern].fullmatch(value.split(": ", 1)[-1]) is None:
+                failures.append(("NAME_PATTERN_VIOLATION", message, value))
 
     for pattern, (local, attribute, message) in _NAMED.items():
-        values = [element.get(attribute, "") for _, element in elements
+        values = [f"{name}: {element.get(attribute, '')}" for name, element in elements
                   if _local(element.tag) == local and attribute in element.attrib]
         if pattern == "implementation_flow":
-            values = [value for value in values if not _GENERATED_FLOW.search(value)]
-        if bad(pattern, values):
-            failures.append(("NAME_PATTERN_VIOLATION", message))
-    configs = [element.get("name", "") for _, element in elements
+            values = [value for value in values if not _GENERATED_FLOW.search(value.split(": ", 1)[-1])]
+        bad(pattern, values, message)
+    configs = [f"{name}: {element.get('name', '')}" for name, element in elements
                if (_local(element.tag) == "config" or _local(element.tag).endswith("-config")) and "name" in element.attrib
                and "apikit" not in element.tag]  # the router is named for its API, not for a system and connector
-    if bad("connector_config", configs):
-        failures.append(("NAME_PATTERN_VIOLATION", "A connector configuration name does not match the standard."))
+    bad("connector_config", configs, "A connector configuration name does not match the standard.")
     keys = [item["key"] for item in bundle.get("keys", ())
             if isinstance(item, dict) and isinstance(item.get("key"), str) and item.get("class") in _KEY_CLASSES]
-    if bad("property_key", keys):
-        failures.append(("NAME_PATTERN_VIOLATION", "A property key does not match the standard."))
-    if bad("feature_flag", [key for key in keys if key.startswith("feature.")]):
-        failures.append(("NAME_PATTERN_VIOLATION", "A feature flag key does not match the standard."))
+    bad("property_key", keys, "A property key does not match the standard.")
+    bad("feature_flag", [key for key in keys if key.startswith("feature.")], "A feature flag key does not match the standard.")
     for pattern, folder, message in (("dataweave_script", "dwl", "A DataWeave script path does not match the standard."),
                                      ("dataweave_module", "modules", "A DataWeave module path does not match the standard.")):
-        if bad(pattern, _relative_files(project_dir, f"{_RESOURCES}/{folder}", ".dwl", _RESOURCES)):
-            failures.append(("NAME_PATTERN_VIOLATION", message))
+        bad(pattern, _relative_files(project_dir, f"{_RESOURCES}/{folder}", ".dwl", _RESOURCES), message)
 
     handler_file = mule.get("error_handler_file")
     if isinstance(handler_file, str):

@@ -16,7 +16,7 @@ def check(project_dir: str, policy: dict[str, Any], bundle: Optional[Mapping[str
         for name in files:
             relative = os.path.relpath(os.path.join(folder, name), project_dir).replace("\\", "/")
             if any(_matches(relative, pattern) for pattern in forbidden):
-                failures.append(("FORBIDDEN_PROJECT_PATH", "Generated project contains a forbidden path."))
+                failures.append(("FORBIDDEN_PROJECT_PATH", "Generated project contains a forbidden path.", relative))
                 return failures
     if policy.get("project", {}).get("forbid_java_interop"):
         java_root = os.path.join(project_dir, "src", "main", "java")
@@ -42,7 +42,7 @@ def _mule_artifact(project_dir: str, expected: Mapping[str, Any], bundle: Mappin
              and ("java" not in expected or artifact.get("javaSpecificationVersions") == [str(expected["java"])])
              and all(key in hidden or f"secure::{key}" in hidden for key in secrets)
              and ("secure_key" not in expected or expected["secure_key"] in hidden))
-    return [] if valid else [("MULE_ARTIFACT_INVALID", "mule-artifact.json is missing or departs from the approved runtime, Java version or secure properties.")]
+    return [] if valid else [("MULE_ARTIFACT_INVALID", "mule-artifact.json is missing or departs from the approved runtime, Java version or secure properties.", "mule-artifact.json")]
 
 
 def _matches(path: str, pattern: str) -> bool:
