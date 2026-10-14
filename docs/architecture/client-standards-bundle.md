@@ -137,7 +137,7 @@ logging:
   forbid_free_text_logger: true
   log_event_subflow: log-event-subflow
 review:
-  branch_pattern: "feature/{ticket_key}-{slug}"
+  branch_pattern: "feature/{ticket_key}-{slug}"     # placeholders: {ticket_key} once, {slug} (helix.gitnames)
   commit_pattern: "{ticket_key}: {summary}"
   approvals: 1
   hotfix_approvals: 2

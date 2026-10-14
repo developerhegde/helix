@@ -29,15 +29,15 @@ This document turns every rule of the standards document into one entry, as `cli
 | Status | Rules |
 | --- | --- |
 | Built | 37 |
-| Partly built | 14 |
+| Partly built | 16 |
 | Designed | 14 |
-| To design | 5 |
+| To design | 3 |
 | Reviewer | 16 |
 | Outside Helix | 7 |
 | Deviation | 1 |
 | **Total** | **94** |
 
-Of the 94 rules (87 Blocking, 7 Advisory), 70 are for Helix to check automatically, 16 stay with a reviewer, 7 belong to the client's pipeline or platform, and 1 is an accepted deviation in B2. 51 of the 70 are fully or partly built today.
+Of the 94 rules (87 Blocking, 7 Advisory), 70 are for Helix to check automatically, 16 stay with a reviewer, 7 belong to the client's pipeline or platform, and 1 is an accepted deviation in B2. 53 of the 70 are fully or partly built today.
 
 *Built* means the validator enforces the rule when the staged `validation_policy.v1` carries its setting. Each standards check is switched on by a policy field, and `helix stage` compiles the policy from the approved bundle, so a rule is enforced for a client once its bundle carries the field.
 
@@ -62,8 +62,8 @@ Of the 94 rules (87 Blocking, 7 Advisory), 70 are for Helix to check automatical
 | STD-NAM-15 | MQ destination is `<domain>-<event>-<env>`; dead-letter queue is `dlq-<queue>` | B | Setting and Template | Helix | To design |
 | STD-NAM-16 | Object Store is `<purpose>-os` | B | Validation: pattern | Helix | Built (`patterns.object_store`) |
 | STD-NAM-17 | API Manager client application is `<consumer>-<env>` | B | Guidance | Client | Outside Helix |
-| STD-NAM-18 | Branch is `feature/…`, `bugfix/…`, `hotfix/…` or `release/<semver>` | B | Setting | Helix | To design (D4: the pattern comes from the bundle) |
-| STD-NAM-19 | Commit message is `<TICKET>: imperative summary`, at most 72 characters | B | Template | Helix | To design |
+| STD-NAM-18 | Branch is `feature/…`, `bugfix/…`, `hotfix/…` or `release/<semver>` | B | Setting | Helix | Partly built: `helix.gitnames` renders the branch from `review.branch_pattern` (D4) and maps it back to its ticket; the git writer that uses it is not built |
+| STD-NAM-19 | Commit message is `<TICKET>: imperative summary`, at most 72 characters | B | Template | Helix | Partly built: `helix.gitnames` renders a one-line subject of at most 72 characters from `review.commit_pattern`; the imperative mood stays with the reviewer, and the git writer is not built |
 | STD-NAM-20 | Kebab-case everywhere except modules, flow variables and error reasons | B | Validation: covered by 07 to 14 | Helix | Built: through 07 to 14 and 16 |
 | STD-NAM-21 | No environment token in a repository, Exchange asset or `artifactId` | B | Validation | Helix | Built: the naming contract refuses `environment` in the repository form |
 | STD-NAM-22 | A new major version is a new repository and `artifactId` | B | Checklist, at the design gate | Reviewer | Reviewer |
@@ -184,5 +184,5 @@ Of the 94 rules (87 Blocking, 7 Advisory), 70 are for Helix to check automatical
 
 1. Carry the branch pattern (D4) through LLD 01, 02, 03, 06 and 07, which still assume the old branch name.
 2. Add the approved rules to the bundle as its `rules[]` registry, each with this document's identifier.
-3. Design the remaining 5 *To design* rules: they need the git writer (branch and commit names), platform-object names, or the parent POM, which a child-only check cannot see.
+3. Design the remaining 3 *To design* rules: platform-object names, the parent POM (which a check on the application alone cannot see), and the release process.
 4. Regenerate the `acme-a` fixture bundle and its digest.

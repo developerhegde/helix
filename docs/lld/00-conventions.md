@@ -146,7 +146,7 @@ The workflow does not branch on exit codes; each phase CLI also writes a `PhaseO
 | `phase` | `discover`, `intake`, `design`, `build`, `test`, `pr`; `deploy` reserved for B6 | `[LLD]` |
 | `gate` | `gate1_requirement`, `gate2_design`, `gate3_merge`, `gate4_deploy` (B6) | `[PLAN]` names, `[LLD]` keys |
 | Logical ticket state | `new`, `needs_info`, `requirement_review`, `design_review`, `building`, `in_review`, `done`, `cancelled`, optional `draft`; `keys_filled`, `deploy_review`, `deployed` reserved for B6 (file 11) | `needs_info`, `requirement_review`, `design_review`, `draft`: `[PLAN]`; others `[LLD]` |
-| Branch | The standards bundle's `review.branch_pattern`, for example `feature/{ticket_key}-{slug}`, in the generated-app repository. Any file that still shows the earlier fixed name is to be revised to this row. How `{slug}` is derived from the ticket is to design (STD-NAM-18) | Standards mapping decision D4 |
+| Branch | The standards bundle's `review.branch_pattern`, for example `feature/{ticket_key}-{slug}`, in the generated-app repository. Any file that still shows the earlier fixed name is to be revised to this row. `{slug}` is the ticket title's lowercase ASCII words joined by hyphens, at most 40 characters; `helix.gitnames` renders the branch and maps it back to the ticket (STD-NAM-18) | Standards mapping decision D4 |
 | Fact status | `known`, `assumed`, `missing`, `changed` | `[PLAN]` |
 | Fact id | `source`, `target`, `trigger`, `volume`, `sla`, `error_handling`, `security`, `mapping`, `environments` (extensible per profile) | `[PLAN]` |
 
