@@ -45,6 +45,8 @@ def compile_policy(standards: Mapping[str, Any], standards_digest: str, contract
     secure_key = _text(configured.get("secure_property_key"), "secure.key")
     tree: dict[str, Any] = {"forbidden_paths": _strings(project.get("forbidden_paths")),
                             "forbid_java_interop": project.get("forbid_java_interop") is not False}
+    if isinstance(project.get("gitignore_required"), list):
+        tree["gitignore_required"] = _strings(project["gitignore_required"])
     if project.get("require_mule_artifact") is True:
         tree["mule_artifact"] = {"min_mule_version": ".".join(runtime.split(".")[:2]),
                                  "java": str(project.get("java", "")), "secure_key": secure_key}
@@ -83,13 +85,27 @@ def compile_policy(standards: Mapping[str, Any], standards_digest: str, contract
         mule["forbid_on_error_continue_any"] = True
     if _section(standards, "api").get("apikit") == "required":
         mule["require_request_validation"] = True
+    if _section(standards, "api").get("autodiscovery") == "required":
+        mule["api_properties"] = True
+    connector_rules = _section(standards, "connectors")
+    for name in ("values_from_properties", "require_http_timeouts"):
+        if connector_rules.get(name) is True:
+            mule["connector_values_from_properties" if name == "values_from_properties" else name] = True
+    if isinstance(errors.get("envelope_script"), str):
+        mule["error_envelope_script"] = errors["envelope_script"]
+    if isinstance(errors.get("mappings"), list):
+        mule["error_mappings"] = [row for row in errors["mappings"] if isinstance(row, dict)]
     if mule:
         policy["mule"] = mule
-    logging = _section(standards, "logging")
+    logging, rules = _section(standards, "logging"), {}
     if logging.get("forbid_free_text_logger") is True:
-        policy["logging"] = {"forbid_free_text_logger": True}
+        rules["forbid_free_text_logger"] = True
         if isinstance(logging.get("log_event_subflow"), str):
-            policy["logging"]["log_event_subflow"] = logging["log_event_subflow"]
+            rules["log_event_subflow"] = logging["log_event_subflow"]
+    if logging.get("forbid_trace") is True or isinstance(logging.get("root_levels"), list):
+        rules["log4j2"] = {"forbid_trace": logging.get("forbid_trace") is True, "root_levels": _strings(logging.get("root_levels"))}
+    if rules:
+        policy["logging"] = rules
     return policy
 
 

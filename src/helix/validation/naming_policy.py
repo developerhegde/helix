@@ -18,7 +18,7 @@ _MARK = re.compile(r"\$\{(?:([A-Z][A-Z0-9]*)_)?(SET|ENCRYPT)_([A-Z][A-Z0-9_]*)\}
 _RESOURCES = "src/main/resources/"
 _CONFIG_SUFFIXES = (".yaml", ".yml", ".properties")
 
-Findings = list[tuple[str, str]]
+Findings = list[tuple[str, ...]]  # (code, message[, subject])
 
 
 def check(project_dir: str, bundle: Mapping[str, Any], policy: Mapping[str, Any],
@@ -85,7 +85,8 @@ def _applications(bundle: Mapping[str, Any], contract: NamingContract, environme
             if contract.render_repository(repository) != name or dict(contract.parse_repository(name)) != repository:
                 raise NamingInvalid("repository name does not round-trip")
         except NamingInvalid:
-            failures.append(("NAME_UNPARSED", "An application repository name does not render and parse under the naming contract."))
+            failures.append(("NAME_UNPARSED", "An application repository name does not render and parse under the naming contract.",
+                             name if isinstance(name, str) else ""))
             continue
         names.append(name.lower())
         if application.get("primary") is True and bundle.get("repo_name", name) != name:
@@ -102,7 +103,7 @@ def _applications(bundle: Mapping[str, Any], contract: NamingContract, environme
                     if dict(parsed) != base or parsed_key != key:
                         raise NamingInvalid("deployed name does not round-trip")
             except NamingInvalid:
-                failures.append(("DEPLOYED_NAME_UNPARSED", "A deployed name does not render and parse under the naming contract."))
+                failures.append(("DEPLOYED_NAME_UNPARSED", "A deployed name does not render and parse under the naming contract.", key))
     if len(set(names)) != len(names):
         failures.append(("APPLICATION_NAME_COLLISION", "Two applications share a repository name."))
 
@@ -154,15 +155,15 @@ def _configuration(project_dir: str, bundle: Mapping[str, Any], policy: Mapping[
         suffixes = [item.suffix for item in contract.environments if not item.production]
 
     present = _config_files(project_dir, contract.configuration["directory"])
-    if set(cells) - present:
-        failures.append(("CONFIGURATION_PATH_MISMATCH", "A configuration file the naming contract requires is missing."))
-    if present - set(cells):
-        failures.append(("CONFIGURATION_PATH_MISMATCH", "A configuration file sits at a path the naming contract does not render."))
+    for path in sorted(set(cells) - present):
+        failures.append(("CONFIGURATION_PATH_MISMATCH", "A configuration file the naming contract requires is missing.", path))
+    for path in sorted(present - set(cells)):
+        failures.append(("CONFIGURATION_PATH_MISMATCH", "A configuration file sits at a path the naming contract does not render.", path))
 
     for value in _property_sources(project_dir):
         rendered = [value.replace(selector, suffix) for suffix in suffixes] if selector and selector in value else [value]
         if any("${" in item or _RESOURCES + item not in sources for item in rendered):
-            failures.append(("CONFIGURATION_PATH_MISMATCH", "Mule configuration loads a property source outside the naming contract."))
+            failures.append(("CONFIGURATION_PATH_MISMATCH", "Mule configuration loads a property source outside the naming contract.", value))
             break
 
     prefix = configuration.get("marker_prefix")
@@ -175,11 +176,11 @@ def _configuration(project_dir: str, bundle: Mapping[str, Any], policy: Mapping[
         wrong = [name for name, value in values.items() if name in owed_cells
                  and not _is_mark(value, prefix, *owed_cells[name])]
         stray = [name for name, value in values.items() if name not in owed_cells and _MARK.search(value)]
-        if missing or extra or wrong or stray:
-            failures.append(("MARKER_POLICY_VIOLATION", "A configuration file does not hold exactly its owed marks."))
+        for key in sorted(missing | extra | set(wrong) | set(stray)):
+            failures.append(("MARKER_POLICY_VIOLATION", "A configuration file does not hold exactly its owed marks.", f"{path}: {key}"))
     for path in (first.test, first.secure_test):
         if os.path.isfile(_absolute(project_dir, path)) and any(_MARK.search(v) for v in _values(project_dir, path).values()):
-            failures.append(("MARKER_POLICY_VIOLATION", "Test configuration contains an environment marker."))
+            failures.append(("MARKER_POLICY_VIOLATION", "Test configuration contains an environment marker.", path))
 
 
 def _is_mark(value: str, prefix: Any, kind: str, environment: str) -> bool:

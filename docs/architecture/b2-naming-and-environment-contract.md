@@ -140,7 +140,7 @@ configuration:
 
 `directory` may be the resource root itself. Only files directly in it count as property files, so the API contract and scripts in sub-folders are not mistaken for one. A contract without `layout` is `environment_files`, and its digest is unchanged from before this field existed.
 
-In `deployment_properties`, the base file's entry for an environment-specific key is a mark, not a ready value: the key holder fills it for the lowest environment after merge. This keeps the rule that an unfinished application cannot start. It differs from the reference standard's wording, "a default for every property", only in that the default arrives after merge.
+In `deployment_properties`, the base file's entry for an environment-specific key is a mark, not a ready value: the key holder fills it for the lowest environment after merge. This keeps the rule that an unfinished application cannot start. It differs from the reference standard's wording, "a default for every property", only in that the default arrives after merge. Owner decision, 2026-10-14: placeholders stay; dummy defaults are not written, because an application missing a value must fail at start-up rather than run on invented data.
 
 ## Helix-owned interface
 

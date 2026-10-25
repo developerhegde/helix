@@ -14,10 +14,10 @@ _PROPERTY_LINE = re.compile(r"^\s*([A-Za-z][A-Za-z0-9_.-]*)\s*[:=]\s*(.*?)\s*$")
 
 
 def check(project_dir: str, bundle: dict[str, Any], policy: dict[str, Any], scan: SourceScan, *,
-          base_marks_allowed: bool = False) -> list[tuple[str, str]]:
+          base_marks_allowed: bool = False) -> list[tuple[str, ...]]:
     """``base_marks_allowed`` is the deployment-properties layout, where the base file holds the lowest
     environment's marks; the naming checks then decide which base cells may hold one."""
-    failures: list[tuple[str, str]] = []
+    failures: list[tuple[str, ...]] = []
     configuration = policy.get("configuration", {})
     allowed_sources = tuple(configuration.get("allowed_property_sources", ()))
     properties = _bundle_properties(bundle)
@@ -25,32 +25,31 @@ def check(project_dir: str, bundle: dict[str, Any], policy: dict[str, Any], scan
     deployment = set(bundle.get("deployment_property_keys", ()))
     defined, markers, secret_values = _configuration_values(project_dir)
     code = set(scan.properties) | set(scan.secure_properties)
-    if scan.dynamic_references:
-        failures.append(("DYNAMIC_PROPERTY_REFERENCE", "Generated source contains an unverifiable dynamic property reference."))
-    if code - defined - deployment:
-        failures.append(("PROPERTY_UNDEFINED", "Generated source references a property not defined or declared for deployment."))
-    if expected - code:
-        failures.append(("PROPERTY_UNUSED", "Approved design keys are not referenced by generated source."))
-    for key in deployment:
-        if key in defined:
-            failures.append(("DEPLOYMENT_PROPERTY_WRITTEN", "A deployment property is written into generated configuration."))
+    for path in scan.dynamic_references:
+        failures.append(("DYNAMIC_PROPERTY_REFERENCE", "Generated source contains an unverifiable dynamic property reference.", path))
+    for key in sorted(code - defined - deployment):
+        failures.append(("PROPERTY_UNDEFINED", "Generated source references a property not defined or declared for deployment.", key))
+    for key in sorted(expected - code):
+        failures.append(("PROPERTY_UNUSED", "Approved design keys are not referenced by generated source.", key))
+    for key in sorted(deployment & defined):
+        failures.append(("DEPLOYMENT_PROPERTY_WRITTEN", "A deployment property is written into generated configuration.", key))
     expected_marker = _expected_markers(properties)
-    for key, allowed in expected_marker.items():
+    for key, allowed in sorted(expected_marker.items()):
         if markers.get(key) not in allowed:
-            failures.append(("MARKER_POLICY_VIOLATION", "Configuration is missing an approved environment marker."))
-    for key, marker in markers.items():
+            failures.append(("MARKER_POLICY_VIOLATION", "Configuration is missing an approved environment marker.", key))
+    for key, marker in sorted(markers.items()):
         allowed = expected_marker.get(key, set())
         if marker not in allowed:
-            failures.append(("MARKER_POLICY_VIOLATION", "Configuration contains an unexpected environment marker."))
+            failures.append(("MARKER_POLICY_VIOLATION", "Configuration contains an unexpected environment marker.", key))
     secret_keys = {key for key, item in properties.items() if item.get("class") == "secret"}
     for path, key, value in secret_values:
         marked = _MARKER.search(value)
         if marked and (path.startswith("src/test/") or (path in allowed_sources and not base_marks_allowed)):
-            failures.append(("MARKER_POLICY_VIOLATION", "Base or test configuration contains an environment marker."))
+            failures.append(("MARKER_POLICY_VIOLATION", "Base or test configuration contains an environment marker.", f"{path}: {key}"))
         # Test files hold fixtures, so a secret-class key may carry a plain value there, never a secret-shaped one.
         plain_secret_key = key in secret_keys and not path.startswith("src/test/")
         if value and not marked and (looks_secret(value) or plain_secret_key):
-            failures.append(("PLAINTEXT_SECRET", "Configuration contains a plaintext secret value."))
+            failures.append(("PLAINTEXT_SECRET", "Configuration contains a plaintext secret value.", f"{path}: {key}"))
     return _unique(failures)
 
 

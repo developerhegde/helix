@@ -252,7 +252,7 @@ The hand-off to the client's own pipeline is the one core route. It was the plan
 | Deployment properties and the secure key | The client's pipeline supplies every key in `deployment_property_keys[]`, the environment's `secure.key` among them, as it does today `[VERIFY]` per client. Under layout `deployment_properties` it also supplies every environment's values above the lowest (3.10) |
 | Completion signal | A check run or commit status named by `deploy.handoff_done_check` (B6, reserved) on `source.commit_sha`, posted by the client pipeline and read by the control plane `[VERIFY]`. If `deploy.handoff_wait_minutes` (B6, reserved) elapses first: `INCOMPLETE`, with the elapsed minutes posted `[LLD]` |
 | Confirmation | The completion signal. The estate is `not_checked` unless an estate provider is configured (3.7) |
-| For whom | Every client with a pipeline. A client with none has no core route (section 4, Q3) |
+| For whom | Every client with a pipeline. A client with none is out of scope (section 4, Q3, owner decision 2026-10-14) |
 
 Withdrawn (standalone decision): route R, a registered CloudHub 2.0 write made by the deploy worker under Meridian's capture gate, with its `app` connected apps and its read-only repository identity. Helix core never deploys an application.
 
@@ -358,9 +358,9 @@ Exit: 1 with each refused sub-check named; every phase refuses to start on that 
 
 **Q2. Inventory rows from the LLD, or skip A10?** Withdrawn (standalone decision): the question existed only because Meridian's runner reconciles from inventory files and one of its assertions compares the committed configuration with a template render. Helix has no inventory and no template render; it renders every property file from the approved key list (07 §3.4.4).
 
-**Q3. A client with no deployment pipeline.** The withdrawn route R was the plan's answer for such a client. The standalone design has none: the reference standard assumes a pipeline. The owner decides whether that client is out of scope or gets an optional adapter that deploys (3.6).
+**Q3. A client with no deployment pipeline.** The withdrawn route R was the plan's answer for such a client. The standalone design has none: the reference standard assumes a pipeline. The owner decides whether that client is out of scope or gets an optional adapter that deploys (3.6). **Owner decision, 2026-10-14:** out of scope. Helix requires a client deployment pipeline, as the reference standard does; a deploying adapter is not designed.
 
-**Q4. Who publishes the contract to Exchange?** This sketch keeps the plan's answer: Helix, after gate 2 and merge, as its one platform write (3.4). The reference standard has the pipeline create platform resources, and under the standards bundle's `api.contract_source: exchange_dependency` (standards mapping decision D2) the specification must be in Exchange before the build, which no B1–B5 identity can do. The owner decides whether the publish stays with Helix in B6 or moves to the client's pipeline.
+**Q4. Who publishes the contract to Exchange?** This sketch keeps the plan's answer: Helix, after gate 2 and merge, as its one platform write (3.4). The reference standard has the pipeline create platform resources, and under the standards bundle's `api.contract_source: exchange_dependency` (standards mapping decision D2) the specification must be in Exchange before the build, which no B1–B5 identity can do. The owner decides whether the publish stays with Helix in B6 or moves to the client's pipeline. **Owner decision, 2026-10-14:** the client's pipeline publishes it, as the reference standard has the pipeline create platform resources. Helix delivers the approved contract in the pull request and makes no platform write; under `api.contract_source: exchange_dependency` the client publishes the contract before the build starts.
 
 ## 5. Errors and exits (B6; `deploy` outcomes use 00 §5)
 

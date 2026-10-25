@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+  <flow name="get-order-by-id-flow">
+    <set-variable variableName="orderId" value="#[attributes.uriParams.orderId]" doc:name="Keep order id"/>
+    <set-variable variableName="logMessage" value="Order request received" doc:name="Set log message"/>
+    <flow-ref name="log-event-subflow" doc:name="Log request received"/>
+    <http:request method="GET" config-ref="erp-http-request-config" path="/orders/{orderId}" doc:name="Call ERP get order">
+      <error-mapping sourceType="HTTP:NOT_FOUND" targetType="APP:ORDER_NOT_FOUND"/>
+      <http:uri-params>#[{orderId: vars.orderId}]</http:uri-params>
+    </http:request>
+    <ee:transform doc:name="Map ERP order to order">
+      <ee:message>
+        <ee:set-payload resource="dwl/orders/map-erp-order-to-order.dwl"/>
+      </ee:message>
+    </ee:transform>
+    <set-variable variableName="logMessage" value="Order request completed" doc:name="Set log message"/>
+    <flow-ref name="log-event-subflow" doc:name="Log request completed"/>
+  </flow>
+
+  <sub-flow name="log-event-subflow">
+    <logger level="INFO" category="acme-b.order" doc:name="Log event as JSON"
+            message='#[output application/json --- {timestamp: now() as String, level: "INFO", appName: app.name, correlationId: correlationId, flowName: flow.name, message: vars.logMessage}]'/>
+  </sub-flow>
+</mule>

@@ -44,7 +44,8 @@ def emit(report: Report, fmt: str, command: str) -> int:
     else:
         sys.stdout.write(f"{pid.CANONICAL_ID} {command}: {report.verdict}\n")
         for finding in report.findings:
-            sys.stdout.write(f"{finding.code}: {finding.message}\n")
+            subject = f" [{finding.subject}]" if finding.subject else ""
+            sys.stdout.write(f"{finding.code}: {finding.message}{subject}\n")
     return 0 if report.verdict == "pass" else 1
 
 

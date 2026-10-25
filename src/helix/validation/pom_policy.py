@@ -35,7 +35,9 @@ def check(project_dir: str, policy: dict[str, Any], bundle: Optional[Mapping[str
             failures.append(("POM_PLUGIN_NOT_ALLOWED", "POM declares an unapproved plugin."))
             break
     runtime = policy.get("maven", {}).get("mule_runtime")
-    if runtime and runtime not in _text_content(root):
+    child_pom = policy.get("maven", {}).get("child_pom")
+    parent_pins = isinstance(child_pom, dict) and child_pom.get("forbid_versions")
+    if runtime and not parent_pins and runtime not in _text_content(root):
         failures.append(("POM_RUNTIME_MISSING", "POM does not declare the approved Mule runtime."))
     failures.extend(_child_rules(root, ns, policy.get("maven", {}), bundle or {}))
     return failures
@@ -67,8 +69,8 @@ def _child_rules(root: ET.Element, ns: str, maven: Mapping[str, Any], bundle: Ma
     if isinstance(connectors, list):
         used = {f"{_text(element, ns, 'groupId')}:{_text(element, ns, 'artifactId')}" for element in root.iter()
                 if local(element) == "dependency" and _text(element, ns, "classifier") == "mule-plugin"}
-        if used - set(connectors):
-            failures.append(("POM_CONNECTOR_NOT_ALLOWED", "POM declares a connector that is not approved."))
+        for coordinate in sorted(used - set(connectors)):
+            failures.append(("POM_CONNECTOR_NOT_ALLOWED", "POM declares a connector that is not approved.", coordinate))
     return failures
 
 

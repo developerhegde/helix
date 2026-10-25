@@ -27,6 +27,7 @@ class MavenRunnerTest(unittest.TestCase):
         with open(self.output, encoding="utf-8") as handle:
             self.assertEqual(json.load(handle), receipt)
         self.assertEqual(command.call_args.kwargs["cwd"], self.project)
+        self.assertLessEqual(set(command.call_args.kwargs["env"]), {"HOME", "JAVA_HOME", "LANG", "PATH", "TMPDIR"})
 
     def test_refuses_unsafe_or_incomplete_invocation(self):
         with self.assertRaises(MavenRunError):
